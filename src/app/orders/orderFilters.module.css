@@ -1,0 +1,194 @@
+/* src/app/orders/orderFilters.module.css */
+
+/* ── Filter Bar ─────────────────────────────────────────────────────────────── */
+.filterBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.filterBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+  background: #F3F4F6;
+  color: #374151;
+}
+
+.filterBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+/* Active state — filled */
+.filterBtn.active {
+  font-weight: 600;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+
+.filterX {
+  opacity: 0.7;
+  margin-left: 1px;
+}
+
+/* ── Color Variants ─────────────────────────────────────────────────────────── */
+
+/* default — All */
+.color_default {
+  background: #F3F4F6;
+  color: #374151;
+  border-color: #E5E7EB;
+}
+.color_default:hover,
+.color_default.active {
+  background: #111827;
+  color: #fff;
+  border-color: #111827;
+}
+
+/* green — Confirmed */
+.color_green {
+  background: #F0FDF4;
+  color: #15803D;
+  border-color: #BBF7D0;
+}
+.color_green:hover,
+.color_green.active {
+  background: #15803D;
+  color: #fff;
+  border-color: #15803D;
+}
+
+/* yellow — Pending */
+.color_yellow {
+  background: #FEFCE8;
+  color: #A16207;
+  border-color: #FEF08A;
+}
+.color_yellow:hover,
+.color_yellow.active {
+  background: #A16207;
+  color: #fff;
+  border-color: #A16207;
+}
+
+/* blue — Fulfilled */
+.color_blue {
+  background: #EFF6FF;
+  color: #1D4ED8;
+  border-color: #BFDBFE;
+}
+.color_blue:hover,
+.color_blue.active {
+  background: #1D4ED8;
+  color: #fff;
+  border-color: #1D4ED8;
+}
+
+/* red — Cancelled */
+.color_red {
+  background: #FEF2F2;
+  color: #B91C1C;
+  border-color: #FECACA;
+}
+.color_red:hover,
+.color_red.active {
+  background: #B91C1C;
+  color: #fff;
+  border-color: #B91C1C;
+}
+
+/* orange — Returned */
+.color_orange {
+  background: #FFF7ED;
+  color: #C2410C;
+  border-color: #FDBA74;
+}
+.color_orange:hover,
+.color_orange.active {
+  background: #C2410C;
+  color: #fff;
+  border-color: #C2410C;
+}
+
+/* amber — COD */
+.color_amber {
+  background: #FFFBEB;
+  color: #B45309;
+  border-color: #FDE68A;
+}
+.color_amber:hover,
+.color_amber.active {
+  background: #B4975A;
+  color: #fff;
+  border-color: #B4975A;
+}
+
+/* purple — Prepaid */
+.color_purple {
+  background: #FAF5FF;
+  color: #7C3AED;
+  border-color: #DDD6FE;
+}
+.color_purple:hover,
+.color_purple.active {
+  background: #7C3AED;
+  color: #fff;
+  border-color: #7C3AED;
+}
+
+/* teal — Arriving Today */
+.color_teal {
+  background: #F0FDFA;
+  color: #0F766E;
+  border-color: #99F6E4;
+}
+.color_teal:hover,
+.color_teal.active {
+  background: #0F766E;
+  color: #fff;
+  border-color: #0F766E;
+}
+
+/* ── Result summary ────────────────────────────────────────────────────────── */
+.resultSummary {
+  font-size: 13px;
+  color: #6B7280;
+  margin: -12px 0 16px;
+}
+
+.resultSummary strong {
+  color: #111827;
+}
+
+/* ── Clear search X button inside search box ───────────────────────────────── */
+.clearSearch {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #9CA3AF;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+
+.clearSearch:hover {
+  color: #374151;
+}

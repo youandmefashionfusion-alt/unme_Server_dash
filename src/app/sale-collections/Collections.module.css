@@ -1,0 +1,255 @@
+.container {
+    background: #f8fafc;
+    min-height: 100vh;
+}
+
+/* Header */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.headerContent h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #1a202c;
+    margin: 0 0 0.5rem 0;
+}
+
+.headerContent p {
+    color: #718096;
+    margin: 0;
+    font-size: 1rem;
+}
+
+.createButton {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: #6f00ff;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.createButton:hover {
+    background: #5a00cc;
+    transform: translateY(-1px);
+}
+
+/* Loading State */
+.loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem;
+    color: #718096;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #e2e8f0;
+    border-left: 4px solid #6f00ff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 1rem;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Empty State */
+.emptyState {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 4rem 2rem;
+    color: #718096;
+}
+
+.emptyState h3 {
+    color: #4a5568;
+    margin: 1rem 0 0.5rem 0;
+}
+
+/* Collections Grid */
+.collectionsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.collectionCard {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    border: 1px solid #e2e8f0;
+}
+
+.collectionCard:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+/* Collection Images */
+.collectionImages {
+    position: relative;
+    height: 160px;
+    background: #f7fafc;
+    display: flex;
+    gap: 2px;
+}
+
+.mainImage, .secondaryImage, .imagePlaceholder {
+    flex: 1;
+    object-fit: cover;
+}
+
+.imagePlaceholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #edf2f7;
+    color: #a0aec0;
+}
+
+/* Collection Info */
+.collectionInfo {
+    padding: 1.25rem;
+}
+
+.collectionTitle {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin: 0 0 0.25rem 0;
+    line-height: 1.4;
+}
+
+.collectionHandle {
+    color: #718096;
+    font-size: 0.875rem;
+    margin: 0 0 1rem 0;
+}
+
+.collectionMeta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.productCount {
+    font-size: 0.875rem;
+    color: #4a5568;
+    font-weight: 500;
+}
+
+.status {
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status.active {
+    background: #c6f6d5;
+    color: #276749;
+}
+
+.status.draft {
+    background: #fed7d7;
+    color: #c53030;
+}
+
+/* Action Buttons */
+.actionButtons {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0 1.25rem 1.25rem;
+}
+
+.actionButtons button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.editBtn {
+    background: #edf2f7;
+    color: #4a5568;
+}
+
+.editBtn:hover {
+    background: #e2e8f0;
+}
+
+.viewBtn {
+    background: #ebf8ff;
+    color: #3182ce;
+}
+
+.viewBtn:hover {
+    background: #bee3f8;
+}
+
+.deleteBtn {
+    background: #fed7d7;
+    color: #e53e3e;
+}
+
+.deleteBtn:hover {
+    background: #feb2b2;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .container {
+        padding: 1rem;
+    }
+
+    .header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
+    }
+
+    .headerContent h1 {
+        font-size: 1.5rem;
+    }
+
+    .collectionsGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .actionButtons {
+        justify-content: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .collectionMeta {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+}

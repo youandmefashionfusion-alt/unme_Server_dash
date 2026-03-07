@@ -1,0 +1,46 @@
+{
+  "name": "youandme",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@reduxjs/toolkit": "^2.10.1",
+    "aos": "^2.3.4",
+    "axios": "^1.13.2",
+    "bcrypt": "^6.0.0",
+    "cloudinary": "^2.8.0",
+    "crypto": "^1.0.1",
+    "draft-js": "^0.11.7",
+    "draftjs-to-html": "^0.9.1",
+    "embla-carousel-react": "^8.6.0",
+    "html-to-draftjs": "^1.5.0",
+    "jsonwebtoken": "^9.0.2",
+    "lucide-react": "^0.553.0",
+    "moment": "^2.30.1",
+    "mongoose": "^8.19.3",
+    "next": "^16.0.8",
+    "next-auth": "^4.24.13",
+    "next-cloudinary": "^6.17.4",
+    "nodemailer": "^7.0.10",
+    "react": "^19.2.1",
+    "react-beautiful-dnd": "^13.1.1",
+    "react-dnd": "^16.0.1",
+    "react-dnd-html5-backend": "^16.0.1",
+    "react-dom": "^19.2.1",
+    "react-draft-wysiwyg": "^1.15.0",
+    "react-hot-toast": "^2.6.0",
+    "react-redux": "^9.2.0",
+    "react-to-pdf": "^2.0.1",
+    "sitemap": "^9.0.0",
+    "stream": "^0.0.3",
+    "uniqid": "^5.4.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "babel-plugin-react-compiler": "1.0.0"
+  }
+}

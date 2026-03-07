@@ -1,0 +1,545 @@
+.container {
+    padding: 0;
+    background: #f8fafc;
+    min-height: 100vh;
+}
+
+/* Header */
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem;
+    background: white;
+    border-bottom: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.headerContent h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #1a202c;
+    margin: 0;
+}
+
+.headerContent p {
+    color: #718096;
+    margin: 0.25rem 0 0 0;
+}
+
+.actionButtons {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.saveButton,
+.deleteButton {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.saveButton {
+    background: #6f00ff;
+    color: white;
+}
+
+.saveButton:hover:not(:disabled) {
+    background: #5a00cc;
+}
+
+.saveButton:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.deleteButton {
+    background: #fed7d7;
+    color: #c53030;
+}
+
+.deleteButton:hover {
+    background: #feb2b2;
+}
+
+/* Content Layout */
+.content {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1rem;
+    padding: 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* Sections */
+.section {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e2e8f0;
+}
+
+.seo {
+    grid-template-columns: 1fr !important;
+}
+
+.section h2 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin: 0 0 1.5rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid #6f00ff;
+}
+
+/* Form Styles */
+.formGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+}
+
+.field label {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: #4a5568;
+    font-size: 0.875rem;
+}
+
+.field input,
+.field select,
+.field textarea {
+    padding: 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+    outline: none;
+    border-color: #6f00ff;
+    box-shadow: 0 0 0 3px rgba(111, 0, 255, 0.1);
+}
+
+.field textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+/* Images */
+.imagesGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.imageUpload {
+    aspect-ratio: 1;
+}
+
+.uploadButton {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border: 2px dashed #cbd5e0;
+    border-radius: 8px;
+    background: #f7fafc;
+    color: #718096;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.uploadButton:hover {
+    border-color: #6f00ff;
+    color: #6f00ff;
+    background: #f0f4ff;
+}
+
+.imagePreview {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.imagePreview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.removeImage {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    background: rgba(0, 0, 0, 0.7);
+    border: none;
+    border-radius: 50%;
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    cursor: pointer;
+}
+
+/* Settings Grid */
+.settingsGrid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+}
+
+/* Loading State */
+.loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 200px;
+    font-size: 1rem;
+    color: #718096;
+}
+
+.spinner {
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #6f00ff;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin-right: 1rem;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Products Section */
+.productsSection {
+    background: white;
+    border-radius: 12px;
+    padding: 25px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    border: 1px solid #e1e5e9;
+    margin: 20px auto;
+    max-width: 1400px;
+    animation: fadeIn 0.5s ease-out;
+}
+
+.productsHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.productsHeader h2 {
+    font-size: 1.5rem;
+    color: #2d3748;
+    margin: 0;
+}
+
+/* Save Order Button */
+.saveOrderButton {
+    background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+    color: white;
+    font-size: 16px;
+    font-weight: 600;
+    padding: 12px 28px;
+    border: none;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    letter-spacing: 0.5px;
+    box-shadow: 0 3px 10px rgba(46, 204, 113, 0.3);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.saveOrderButton:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(46, 204, 113, 0.4);
+}
+
+/* Products List Header (column labels) */
+.productsListHeader {
+    display: grid;
+    grid-template-columns: 80px 5fr 1fr 1fr 1fr;
+    gap: 20px;
+    padding: 15px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 8px;
+    margin-bottom: 10px;
+    font-weight: 700;
+    color: #2c3e50;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Products List (Droppable Area) */
+.productsList {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    background-color: white;
+    max-height: 60vh;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+
+/* Product Item (Draggable) */
+.productItem {
+    display: grid;
+    grid-template-columns: 80px 5fr 1fr 1fr 1fr;
+    gap: 20px;
+    align-items: center;
+    padding: 15px;
+    border-bottom: 2px solid #f1f2f6;
+    transition: all 0.3s ease;
+    background: white;
+    cursor: grab;
+    user-select: none;
+}
+
+.productItem:active {
+    cursor: grabbing;
+}
+
+.productItem:hover {
+    background: linear-gradient(135deg, #f8f9fa 0%, #f1f2f6 100%);
+    transform: translateX(5px);
+    border-radius: 8px;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+}
+
+.productItem.dragging {
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    background: white;
+    border: 2px solid #3498db;
+    opacity: 0.8;
+}
+
+/* Product Image */
+.productImage {
+    width: 70px;
+    height: 70px;
+    border: 2px solid #e1e5e9;
+    border-radius: 8px;
+    object-fit: cover;
+    transition: all 0.3s ease;
+}
+
+.productItem:hover .productImage {
+    border-color: #3498db;
+    transform: scale(1.05);
+}
+
+/* Product Info */
+.productTitle {
+    font-size: 14px;
+    font-weight: 600;
+    color: #2c3e50;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.productSku {
+    font-family: 'Courier New', monospace;
+    color: #7f8c8d;
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.productInventory {
+    color: #27ae60;
+    font-weight: 700;
+    text-align: center;
+    font-size: 14px;
+}
+
+/* Status Badge */
+.productStatus {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    text-transform: uppercase;
+    font-weight: 700;
+    text-align: center;
+    width: fit-content;
+}
+
+.productStatus[data-state="active"] {
+    background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+    color: #065f46;
+}
+
+.productStatus[data-state="draft"] {
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    color: #991b1b;
+}
+
+.productStatus[data-state="inactive"] {
+    background: linear-gradient(135deg, #e5e7eb 0%, #d1d5db 100%);
+    color: #374151;
+}
+
+/* Empty Products */
+.noProducts {
+    text-align: center;
+    padding: 2rem;
+    color: #718096;
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+/* Animation */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+    .content {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+}
+
+@media (max-width: 950px) {
+    .productsListHeader,
+    .productItem {
+        grid-template-columns: 60px 4fr 1fr 1fr 1fr;
+        gap: 15px;
+    }
+}
+
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
+        padding: 1rem;
+    }
+
+    .content {
+        padding: 1rem;
+    }
+
+    .formGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .imagesGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .actionButtons {
+        width: 100%;
+        justify-content: stretch;
+    }
+
+    .saveButton,
+    .deleteButton {
+        flex: 1;
+        justify-content: center;
+    }
+
+    .productsSection {
+        padding: 20px;
+    }
+
+    .saveOrderButton {
+        font-size: 14px;
+        padding: 10px 20px;
+    }
+
+    .productsListHeader,
+    .productItem {
+        grid-template-columns: 50px 3fr 1fr 1fr 1fr;
+        gap: 12px;
+        font-size: 12px;
+    }
+
+    .productImage {
+        width: 50px;
+        height: 50px;
+    }
+
+    .productTitle,
+    .productSku,
+    .productInventory {
+        font-size: 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .productsListHeader,
+    .productItem {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .productsListHeader {
+        display: none; /* Hide headers on very small screens */
+    }
+
+    .productItem {
+        padding: 12px;
+        border: 2px solid #f1f2f6;
+        border-radius: 8px;
+        margin-bottom: 10px;
+    }
+
+    .productImage {
+        margin: 0 auto;
+    }
+
+    .productTitle,
+    .productSku,
+    .productInventory {
+        text-align: center;
+    }
+
+    .productStatus {
+        margin: 0 auto;
+    }
+}

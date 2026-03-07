@@ -1,0 +1,8 @@
+User-agent: *
+Disallow: /404
+Disallow: /checkout
+Disallow: /search
+Disallow: /collections/undefined
+Disallow: /home
+Disallow: /products/undefined
+Disallow: /order-track
