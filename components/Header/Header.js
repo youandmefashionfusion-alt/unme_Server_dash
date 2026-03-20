@@ -58,7 +58,6 @@ const Header = () => {
     return pathname.startsWith(href);
   };
   const {user} = useSelector((state)=>state?.auth)
-  console.log(user)
 
   return (
     <>
@@ -86,11 +85,11 @@ const Header = () => {
 
           <div className={styles.userMenu}>
             <div className={styles.userAvatar}>
-              <span>{user?.firstname[0]}</span>
+              <span>{user?.firstname?.[0] || "A"}</span>
             </div>
             <div className={styles.userInfo}>
-              <span className={styles.userName}>{user?.firstname}</span>
-              <span className={styles.userRole}>{user?.role.toUpperCase()}</span>
+              <span className={styles.userName}>{user?.firstname || "Admin"}</span>
+              <span className={styles.userRole}>{user?.role ? user.role.toUpperCase() : "ADMIN"}</span>
             </div>
           </div>
         </div>

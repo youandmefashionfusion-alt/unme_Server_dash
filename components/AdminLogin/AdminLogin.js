@@ -1,8 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { useRouter } from 'next/navigation';
-import { Lock, Phone, Eye, EyeOff, Sparkles } from 'lucide-react';
+import { Lock, Phone, Eye, EyeOff } from 'lucide-react';
 import { loginUser } from '../../src/lib/slices/authSlice';
 import styles from './AdminLogin.module.css';
 import Image from 'next/image';
@@ -10,7 +9,6 @@ import logo from '../../images/logo.png'
 
 const AdminLogin = () => {
   const dispatch = useDispatch();
-  const router = useRouter();
 
   const [formData, setFormData] = useState({
     number: '',
@@ -54,8 +52,6 @@ const AdminLogin = () => {
       setLoading(false);
       return;
     }
-    console.log("MONGO_URL:", process.env.MONGO_URL);
-
 
     try {
       await dispatch(loginUser({

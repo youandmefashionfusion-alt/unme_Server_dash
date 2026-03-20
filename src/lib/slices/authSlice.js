@@ -33,8 +33,6 @@ export const checkAuthStatus = createAsyncThunk(
 export const loginUser = createAsyncThunk(
   'auth/login',
   async ({ mobile, password }, { rejectWithValue }) => {
-    console.log(mobile,password)
-
     try {
       const response = await fetch('/api/user/admin-login', {
         method: 'POST',
@@ -137,8 +135,8 @@ const authSlice = createSlice({
   name: 'auth',
   initialState: {
     user: null,
-    isAuthenticated: true,
-    loading: false,
+    isAuthenticated: false,
+    loading: true,
     error: null,
   },
   reducers: {
