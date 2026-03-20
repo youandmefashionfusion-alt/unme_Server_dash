@@ -438,7 +438,6 @@ export const useProductForm = (productId, isNew = false) => {
     if (!isNew && productId) {
       fetchProduct();
     }
-    return () => setMounted(false);
   }, [fetchCollections, fetchSaleCollections, fetchProduct, productId, isNew]);
 
   const totals = useMemo(() => ({

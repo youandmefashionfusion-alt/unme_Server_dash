@@ -2,68 +2,91 @@ const mongoose = require("mongoose"); // Erase if already required
 // Declare the Schema of the Mongo model
 var abondendSchema = new mongoose.Schema(
   {
-    tag:{
-      type:String,
+    tag: {
+      type: String,
     },
     orderNumber: {
       type: String,
       unique: true,
     },
-    shippingInfo:{
-      firstname:{
-        type:String,
+    shippingInfo: {
+      firstname: {
+        type: String,
       },
-      lastname:{
-        type:String,
+      lastname: {
+        type: String,
       },
-      email:{
-        type:String,
+      email: {
+        type: String,
       },
-      phone:{
-        type:Number,
+      phone: {
+        type: Number,
       },
-      address:{
-        type:String,
+      address: {
+        type: String,
       },
-      city:{
-        type:String,
+      city: {
+        type: String,
       },
-      state:{
-        type:String,
+      state: {
+        type: String,
       },
-      pincode:{
-        type:Number,
+      pincode: {
+        type: Number,
       },
     },
-    orderItems:[{
-      product:{
-        type:mongoose.Schema.Types.ObjectId,
-        ref:"Product",
+    orderItems: [
+      {
+        product: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Product",
+        },
+        quantity: {
+          type: Number,
+        },
+        price: {
+          type: Number,
+        },
+        color: {
+          type: String,
+        },
+        size: {
+          type: String,
+        },
       },
-      quantity:{
-        type:Number,
+    ],
+    totalPrice: {
+      type: Number,
+    },
+    shippingCost: {
+      type: Number,
+    },
+    orderType: {
+      type: String,
+    },
+    discount: {
+      type: Number,
+    },
+    finalAmount: {
+      type: Number,
+    },
+    paymentInfo: {
+      orderCreationId: {
+        type: String,
       },
-      price:{
-        type:Number,
+      razorpayPaymentId: {
+        type: String,
       },
-    }],
-    totalPrice:{
-      type:Number,
+      razorpayOrderId: {
+        type: String,
+      },
     },
-    shippingCost:{
-      type:Number,
+    orderCalled: {
+      type: String,
+      default: "pending",
     },
-    orderType:{
-      type:String,
-    },
-    discount:{
-      type:Number,
-    },
-    finalAmount:{
-      type:Number,
-    },
-    orderCalled:{
-      type:String,
+    msg: {
+      type: String,
     },
   },
   {
@@ -73,22 +96,34 @@ var abondendSchema = new mongoose.Schema(
 abondendSchema.pre("save", async function (next) {
   try {
     if (!this.orderNumber) {
-      const latestOrder = await this.constructor.findOne({}, {}, { sort: { 'createdAt': -1 } });
+      const latestOrder = await this.constructor.findOne({}, {}, { sort: { createdAt: -1 } });
       let latestOrderNumber = 0;
 
       if (latestOrder && latestOrder.orderNumber) {
-        latestOrderNumber = parseInt(latestOrder.orderNumber.replace(/[^\d]/g, ''), 10);
+        const extractedOrderNumber = parseInt(
+          latestOrder.orderNumber.replace(/[^\d]/g, ""),
+          10
+        );
+        latestOrderNumber = Number.isNaN(extractedOrderNumber) ? 0 : extractedOrderNumber;
       }
 
-      const tagPrefix ="YM000";
-      const newOrderNumber = `${tagPrefix}${latestOrderNumber + 1}`;
-      this.orderNumber = newOrderNumber;
+      const tagPrefix = "YM000";
+      let nextOrderNumber = latestOrderNumber + 1;
+      let generatedOrderNumber = `${tagPrefix}${nextOrderNumber}`;
+
+      // Ensure uniqueness in case of concurrent writes.
+      while (await this.constructor.exists({ orderNumber: generatedOrderNumber })) {
+        nextOrderNumber += 1;
+        generatedOrderNumber = `${tagPrefix}${nextOrderNumber}`;
+      }
+
+      this.orderNumber = generatedOrderNumber;
     }
     next();
   } catch (error) {
     next(error);
   }
 });
-const AbondendModel =mongoose.models.Abondend || mongoose.model("Abondend", abondendSchema);
+const AbondendModel = mongoose.models.Abondend || mongoose.model("Abondend", abondendSchema);
 
 export default AbondendModel;
