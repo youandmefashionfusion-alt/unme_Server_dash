@@ -13,6 +13,7 @@ export const useProductForm = (productId, isNew = false) => {
   const { user } = useSelector((state) => state.auth);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [dbProductId, setDbProductId] = useState('');
   const [collections, setCollections] = useState([]);
   const [saleCollections, setSaleCollections] = useState([]);
   const [mounted, setMounted] = useState(false);
@@ -34,13 +35,12 @@ export const useProductForm = (productId, isNew = false) => {
     collectionName: '',
     collectionHandle: '',
     quantity: 0,
-    weight: '0 Grams',
     color: [],
     material: [],
     type: [],
     necklaceType: [],
     ringDesign: [],
-    ringSize: [],
+    sizes: [],
     gender: 'unisex',
     bossPicks: true,
     gatawayJewels: true,
@@ -62,7 +62,7 @@ export const useProductForm = (productId, isNew = false) => {
     type: '',
     necklaceType: '',
     ringDesign: '',
-    ringSize: '',
+    sizes: '',
   });
 
   // Fetch collections
@@ -97,9 +97,15 @@ export const useProductForm = (productId, isNew = false) => {
 
       if (data.success && data.product) {
         const product = data.product;
+        setDbProductId(product._id || '');
 
         // ✅ Normalize saleCollections to array of IDs
         const saleCollectionIds = product.saleCollections?.map(sc => sc._id || sc) || [];
+        const normalizedSizes = Array.isArray(product.sizes)
+          ? product.sizes
+          : Array.isArray(product.ringSize)
+            ? product.ringSize
+            : [];
 
         setFormData({
           title: product.title || '',
@@ -118,13 +124,12 @@ export const useProductForm = (productId, isNew = false) => {
           collectionName: product.collectionName?._id || '',
           collectionHandle: product.collectionHandle || '',
           quantity: product.quantity || 0,
-          weight: product.weight || '0 Grams',
           color: product.color || [],
           material: product.material || [],
           type: product.type || [],
           necklaceType: product.necklaceType || [],
           ringDesign: product.ringDesign || [],
-          ringSize: product.ringSize || [],
+          sizes: normalizedSizes,
           gender: product.gender || 'unisex',
           bossPicks: product.bossPicks ?? true,
           gatawayJewels: product.gatawayJewels ?? true,
@@ -278,7 +283,7 @@ export const useProductForm = (productId, isNew = false) => {
     try {
       const url = isNew
         ? `/api/products/create-product?token=${user.token}`
-        : `/api/products/update-product?id=${productId}&token=${user.token}`;
+        : `/api/products/update-product?id=${dbProductId || productId}&token=${user.token}`;
 
       const method = isNew ? 'POST' : 'PUT';
 
@@ -332,7 +337,7 @@ export const useProductForm = (productId, isNew = false) => {
     } finally {
       setSaving(false);
     }
-  }, [formData, user, productId, isNew, validateForm]);
+  }, [formData, user, productId, dbProductId, isNew, validateForm]);
 
   // Delete product
   const deleteProduct = useCallback(async () => {
@@ -345,7 +350,7 @@ export const useProductForm = (productId, isNew = false) => {
 
     setSaving(true);
     try {
-      const res = await fetch(`/api/products/delete-product?id=${productId}&token=${user.token}`, {
+      const res = await fetch(`/api/products/delete-product?id=${dbProductId || productId}&token=${user.token}`, {
         method: 'DELETE',
       });
 
@@ -377,7 +382,7 @@ export const useProductForm = (productId, isNew = false) => {
     } finally {
       setSaving(false);
     }
-  }, [user, productId, formData.title, formData.sku]);
+  }, [user, productId, dbProductId, formData.title, formData.sku]);
 
   // Duplicate product
   const duplicateProduct = useCallback(async () => {
@@ -433,6 +438,9 @@ export const useProductForm = (productId, isNew = false) => {
   // Initialize
   useEffect(() => {
     setMounted(true);
+    if (isNew) {
+      setDbProductId('');
+    }
     fetchCollections();
     fetchSaleCollections();
     if (!isNew && productId) {
@@ -469,3 +477,4 @@ export const useProductForm = (productId, isNew = false) => {
     duplicateProduct,
   };
 };
+

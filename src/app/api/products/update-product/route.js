@@ -10,7 +10,16 @@ export async function PUT(request) {
     try {
         await connectDb()
         await authMiddleware(token)
-      const updateProduct = await ProductModel.findByIdAndUpdate(id , body, {
+      const payload = { ...body };
+
+      // Normalize legacy payload keys.
+      if (!Array.isArray(payload.sizes) && Array.isArray(payload.ringSize)) {
+        payload.sizes = payload.ringSize;
+      }
+      delete payload.ringSize;
+      delete payload.weight;
+
+      const updateProduct = await ProductModel.findByIdAndUpdate(id , payload, {
         new: true,
       });
       if(updateProduct){

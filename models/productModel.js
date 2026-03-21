@@ -90,10 +90,6 @@ const productSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
-    weight: {
-      type: String,
-      default: "0 Grams",
-    },
     color: {
       type: [String],
       default: [],
@@ -114,7 +110,7 @@ const productSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
-    ringSize: {
+    sizes: {
       type: [String],
       default: [],
     },

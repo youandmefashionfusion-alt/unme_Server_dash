@@ -18,6 +18,13 @@ const CollectionDetail = () => {
     const isNewCollection = collectionId === 'new'
 
     const { user } = useSelector((state) => state.auth)
+    const [isWidgetMounted, setIsWidgetMounted] = useState(false)
+
+    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+    const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET
+    const apiKey = process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY
+    const canRenderWidget = Boolean(cloudName && uploadPreset)
+    const useSignedUploads = Boolean(apiKey)
 
     const [formData, setFormData] = useState({
         title: '',
@@ -35,6 +42,10 @@ const CollectionDetail = () => {
     const [saving, setSaving] = useState(false)
     const [products, setProducts] = useState([])
     const [productsLoading, setProductsLoading] = useState(false)
+
+    useEffect(() => {
+        setIsWidgetMounted(true)
+    }, [])
 
     useEffect(() => {
         if (!isNewCollection && collectionId) {
@@ -270,7 +281,17 @@ const CollectionDetail = () => {
             {/* Header */}
             <div className={styles.header}>
                 <div className={styles.headerContent}>
-                    <h1>{isNewCollection ? 'Create Collection' : formData.title}</h1>
+                    <div className={styles.headerTop}>
+                        <button
+                            type="button"
+                            className={styles.backButton}
+                            onClick={() => router.push('/collections')}
+                            aria-label="Back to collections"
+                        >
+                            <ArrowLeft size={18} />
+                        </button>
+                        <h1>{isNewCollection ? 'Create Collection' : formData.title}</h1>
+                    </div>
                     <p>{isNewCollection ? 'Add a new product collection' : 'Manage collection details and products'}</p>
                 </div>
 
@@ -352,17 +373,41 @@ const CollectionDetail = () => {
                                             </button>
                                         </div>
                                     ) : (
-                                        <CldUploadWidget
-                                            signatureEndpoint="/api/upload/upload-img"
-                                            onSuccess={(result) => handleImageUpload(result, index)}
-                                        >
-                                            {({ open }) => (
-                                                <button onClick={open} className={styles.uploadButton}>
-                                                    <Upload size={24} />
-                                                    Upload Image {index + 1}
-                                                </button>
-                                            )}
-                                        </CldUploadWidget>
+                                        !canRenderWidget ? (
+                                            <button className={styles.uploadButton} disabled>
+                                                <Upload size={24} />
+                                                Upload disabled (Cloudinary env missing)
+                                            </button>
+                                        ) : !isWidgetMounted ? (
+                                            <button className={styles.uploadButton} disabled>
+                                                <Upload size={24} />
+                                                Preparing uploader...
+                                            </button>
+                                        ) : (
+                                            <CldUploadWidget
+                                                config={{
+                                                    cloud: {
+                                                        cloudName,
+                                                        ...(useSignedUploads ? { apiKey } : {}),
+                                                    },
+                                                }}
+                                                uploadPreset={uploadPreset}
+                                                {...(useSignedUploads ? { signatureEndpoint: '/api/upload/upload-img' } : {})}
+                                                onSuccess={(result) => handleImageUpload(result, index)}
+                                                options={{
+                                                    cloudName,
+                                                    uploadPreset,
+                                                    sources: ['local', 'url', 'camera'],
+                                                }}
+                                            >
+                                                {({ open }) => (
+                                                    <button onClick={() => open()} className={styles.uploadButton}>
+                                                        <Upload size={24} />
+                                                        Upload Image {index + 1}
+                                                    </button>
+                                                )}
+                                            </CldUploadWidget>
+                                        )
                                     )}
                                 </div>
                             ))}
@@ -468,7 +513,12 @@ const CollectionDetail = () => {
                                 <span>Status</span>
                             </div>
                             <DragDropContext onDragEnd={handleOnDragEnd}>
-                                <Droppable droppableId="products">
+                                <Droppable
+                                    droppableId="products"
+                                    isDropDisabled={false}
+                                    isCombineEnabled={false}
+                                    ignoreContainerClipping={false}
+                                >
                                     {(provided) => (
                                         <div
                                             {...provided.droppableProps}

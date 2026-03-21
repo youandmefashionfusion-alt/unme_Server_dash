@@ -11,7 +11,16 @@ export async function POST(req) {
     await connectDb();
     await authMiddleware(token);
 
-    let baseSlug = body.handle;
+    const payload = { ...body };
+
+    // Normalize legacy payload keys.
+    if (!Array.isArray(payload.sizes) && Array.isArray(payload.ringSize)) {
+      payload.sizes = payload.ringSize;
+    }
+    delete payload.ringSize;
+    delete payload.weight;
+
+    let baseSlug = payload.handle;
     let finalSlug = baseSlug;
     let count = 1;
 
@@ -21,9 +30,9 @@ export async function POST(req) {
       count++;
     }
 
-    body.handle = finalSlug;
+    payload.handle = finalSlug;
 
-    await ProductModel.create(body);
+    await ProductModel.create(payload);
 
     return Response.json(
       {

@@ -253,15 +253,6 @@ const ProductDetailPage = () => {
                 />
               </div>
               <div className={styles.field}>
-                <label>Weight</label>
-                <input
-                  type="text"
-                  placeholder="e.g., 10 Grams"
-                  value={formData.weight}
-                  onChange={(e) => handleInputChange('weight', e.target.value)}
-                />
-              </div>
-              <div className={styles.field}>
                 <label>Gender</label>
                 <select
                   value={formData.gender}
@@ -460,14 +451,14 @@ const ProductDetailPage = () => {
             />
 
             <ArrayInput
-              title="Ring Sizes"
-              field="ringSize"
-              items={formData.ringSize}
-              inputValue={arrayInputs.ringSize}
+              title="Sizes"
+              field="sizes"
+              items={formData.sizes}
+              inputValue={arrayInputs.sizes}
               onInputChange={handleArrayInputChange}
               onAdd={handleArrayAdd}
               onRemove={handleArrayRemove}
-              placeholder="Add ring size"
+              placeholder="Add size"
             />
           </div>
 

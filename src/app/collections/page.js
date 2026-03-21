@@ -5,6 +5,7 @@ import styles from './Collections.module.css'
 import { Plus, Image, Package, Edit, Trash2, Eye } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import toast from 'react-hot-toast'
 
 const CollectionsPage = () => {
     const [collections, setCollections] = useState([])
@@ -19,7 +20,7 @@ const CollectionsPage = () => {
     const fetchCollections = async () => {
         try {
             setLoading(true)
-            const response = await fetch('/api/collection/getallcollections')
+            const response = await fetch('/api/collection/getallcollections', { cache: 'no-store' })
             const data = await response.json()
             if (response.ok) {
                 setCollections(data.collections || data)

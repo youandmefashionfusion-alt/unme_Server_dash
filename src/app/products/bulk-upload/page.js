@@ -108,20 +108,23 @@ const BulkUploadPage = () => {
               sku = `PRD-${Date.now().toString().slice(-6)}-${index + 1}`;
             }
 
+            const rawSizes = row['Sizes'] ?? row['Ring Size'] ?? '';
+
             return {
               title: row['Product Title']?.trim() || '',
               description: `<p>${row['Description'] || ''}</p>`,
               price: parseFloat(row['Price']) || 0,
               crossPrice: parseFloat(row['Cross Price']) || 0,
               quantity: parseInt(row['Quantity']) || 0,
-              weight: row['Weight'] || '0 Grams',
               gender: row['Gender']?.toLowerCase() || 'unisex',
               color: row['Color'] ? row['Color'].split(',').map(c => c.trim()).filter(Boolean) : [],
               material: row['Material'] ? row['Material'].split(',').map(m => m.trim()).filter(Boolean) : [],
               type: row['Type'] ? row['Type'].split(',').map(t => t.trim()).filter(Boolean) : [],
               necklaceType: row['Necklace Type'] ? row['Necklace Type'].split(',').map(n => n.trim()).filter(Boolean) : [],
               ringDesign: row['Ring Design'] ? row['Ring Design'].split(',').map(r => r.trim()).filter(Boolean) : [],
-              ringSize: row['Ring Size'] ? row['Ring Size'].split(',').map(r => r.trim()).filter(Boolean) : [],
+              sizes: rawSizes
+                ? String(rawSizes).split(',').map(r => r.trim()).filter(Boolean)
+                : [],
               imageUrls: images.filter(Boolean),
               sku,
               state: 'active',
@@ -294,14 +297,13 @@ const BulkUploadPage = () => {
         'Price': 899,
         'Cross Price': 1499,
         'Quantity': 15,
-        'Weight': '10 Grams',
         'Gender': 'Female',
         'Color': 'Gold, Rose Gold',
         'Material': 'Stainless Steel',
         'Type': 'Necklace',
         'Necklace Type': 'Pendant',
         'Ring Design': '',
-        'Ring Size': '',
+        'Sizes': '',
         'SKU': 'NP-GD-001',
         'Image Link 1': 'https://example.com/image1.jpg',
         'Image Link 2': 'https://example.com/image2.jpg',

@@ -22,6 +22,31 @@
     margin: 0;
 }
 
+.headerTop {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.backButton {
+    width: 2.25rem;
+    height: 2.25rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #2d3748;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.backButton:hover {
+    background: #edf2f7;
+    border-color: #cbd5e0;
+}
+
 .headerContent p {
     color: #718096;
     margin: 0.25rem 0 0 0;

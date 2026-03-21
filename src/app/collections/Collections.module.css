@@ -31,7 +31,7 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.75rem 1.5rem;
-    background: #6f00ff;
+    background: #d97706;
     color: white;
     border: none;
     border-radius: 8px;
@@ -42,7 +42,7 @@
 }
 
 .createButton:hover {
-    background: #5a00cc;
+    background: #b45309;
     transform: translateY(-1px);
 }
 
