@@ -7,10 +7,10 @@ import {
   ArrowLeft, Save, Eye, Edit, Trash2, Upload, X, 
   Calendar, TrendingUp, FileText, Globe, Settings 
 } from 'lucide-react'
-import { CldUploadWidget } from 'next-cloudinary'
 import dynamic from "next/dynamic"
 import { EditorState, ContentState, convertToRaw } from "draft-js"
 import draftToHtml from "draftjs-to-html"
+import { uploadFileToS3 } from '@/lib/uploadToS3'
 const htmlToDraft = typeof window === "object" ? require("html-to-draftjs").default : null
 const Editor = dynamic(
   () => import("react-draft-wysiwyg").then((mod) => mod.Editor),
@@ -28,6 +28,7 @@ const BlogDetailPage = () => {
   const [blog, setBlog] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   
   // Form state
@@ -112,9 +113,24 @@ const BlogDetailPage = () => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
-  const handleImageUpload = (result) => {
-    const newImage = result.info.secure_url
-    setFormData(prev => ({ ...prev, image: newImage }))
+  const handleImageUpload = async (file) => {
+    if (!file) return
+
+    try {
+      setUploadingImage(true)
+      const uploaded = await uploadFileToS3(file, { folder: 'blogs' })
+      const newImage = uploaded?.secure_url || uploaded?.url
+      if (!newImage) {
+        throw new Error('Missing uploaded image URL')
+      }
+      setFormData(prev => ({ ...prev, image: newImage }))
+      toast.success('Image uploaded successfully')
+    } catch (error) {
+      console.error('Blog image upload error:', error)
+      toast.error(error.message || 'Failed to upload image')
+    } finally {
+      setUploadingImage(false)
+    }
   }
 
   const removeImage = () => {
@@ -227,10 +243,26 @@ const BlogDetailPage = () => {
     }
   }
 
-  const modifyCloudinaryUrl = (url) => {
+  const getPreviewImageUrl = (url) => {
     if (!url) return '/placeholder-blog.jpg'
-    const urlParts = url.split('/upload/')
-    return `${urlParts[0]}/upload/c_limit,h_600,f_auto,q_70/${urlParts[1]}`
+    const cloudfront = process.env.NEXT_PUBLIC_CLOUDFRONT_URL || 'https://d2gtpgxs0y565n.cloudfront.net';
+    
+    // Check if it's an S3 URL - convert to CloudFront
+    if (url.includes('s3.') || url.includes('amazonaws.com')) {
+      try {
+        const urlObj = new URL(url);
+        const pathname = urlObj.pathname;
+        return `${cloudfront}${pathname}`;
+      } catch (e) {
+        return url;
+      }
+    }
+    
+    if (url.includes('res.cloudinary.com') && url.includes('/upload/')) {
+      const urlParts = url.split('/upload/')
+      return `${urlParts[0]}/upload/c_limit,h_600,f_auto,q_70/${urlParts[1]}`
+    }
+    return url
   }
 
   if (loading) {
@@ -375,7 +407,7 @@ const BlogDetailPage = () => {
                 {formData.image&& (
                   <div className={styles.blogImage}>
                     <img 
-                      src={modifyCloudinaryUrl(formData.image)} 
+                      src={getPreviewImageUrl(formData.image)} 
                       alt={formData.title}
                     />
                   </div>
@@ -417,7 +449,7 @@ const BlogDetailPage = () => {
                   {formData.image? (
                     <div className={styles.imagePreview}>
                       <img 
-                        src={modifyCloudinaryUrl(formData.image)} 
+                        src={getPreviewImageUrl(formData.image)} 
                         alt="Featured"
                       />
                       <button onClick={removeImage} className={styles.removeImage}>
@@ -425,17 +457,17 @@ const BlogDetailPage = () => {
                       </button>
                     </div>
                   ) : (
-                    <CldUploadWidget
-                      signatureEndpoint="/api/upload/upload-img"
-                      onSuccess={handleImageUpload}
-                    >
-                      {({ open }) => (
-                        <button onClick={open} className={styles.uploadButton}>
-                          <Upload size={20} />
-                          Upload Image
-                        </button>
-                      )}
-                    </CldUploadWidget>
+                    <label className={styles.uploadButton}>
+                      <Upload size={20} />
+                      {uploadingImage ? 'Uploading...' : 'Upload Image'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        hidden
+                        disabled={uploadingImage || saving}
+                        onChange={(e) => handleImageUpload(e.target.files?.[0])}
+                      />
+                    </label>
                   )}
                 </div>
               </div>

@@ -7,9 +7,35 @@ import {
     ArrowLeft, Save, Trash2, Upload, X, Image, BarChart3, Settings,
     Download
 } from 'lucide-react'
-import { CldUploadWidget } from 'next-cloudinary'
 import toast from 'react-hot-toast'
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd'
+import { uploadFileToS3 } from '@/lib/uploadToS3'
+
+// ── Moved outside component — handles S3 → CloudFront + Cloudinary transforms ──
+const getImageUrl = (url) => {
+    if (!url) return '/placeholder.png'
+
+    const cloudfront =
+        process.env.NEXT_PUBLIC_CLOUDFRONT_URL || 'https://d2gtpgxs0y565n.cloudfront.net'
+
+    // ✅ FIX: S3 URL → CloudFront
+    if (url.includes('s3.') || url.includes('amazonaws.com')) {
+        try {
+            const urlObj = new URL(url)
+            return `${cloudfront}${urlObj.pathname}`
+        } catch {
+            return url
+        }
+    }
+
+    // Cloudinary → add transformations
+    if (url.includes('res.cloudinary.com') && url.includes('/upload/')) {
+        const parts = url.split('/upload/')
+        return `${parts[0]}/upload/c_limit,h_100,f_auto,q_50/${parts[1]}`
+    }
+
+    return url
+}
 
 const CollectionDetail = () => {
     const params = useParams()
@@ -18,13 +44,7 @@ const CollectionDetail = () => {
     const isNewCollection = collectionId === 'new'
 
     const { user } = useSelector((state) => state.auth)
-    const [isWidgetMounted, setIsWidgetMounted] = useState(false)
-
-    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
-    const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET
-    const apiKey = process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY
-    const canRenderWidget = Boolean(cloudName && uploadPreset)
-    const useSignedUploads = Boolean(apiKey)
+    const [uploadingImages, setUploadingImages] = useState({})
 
     const [formData, setFormData] = useState({
         title: '',
@@ -42,10 +62,6 @@ const CollectionDetail = () => {
     const [saving, setSaving] = useState(false)
     const [products, setProducts] = useState([])
     const [productsLoading, setProductsLoading] = useState(false)
-
-    useEffect(() => {
-        setIsWidgetMounted(true)
-    }, [])
 
     useEffect(() => {
         if (!isNewCollection && collectionId) {
@@ -71,10 +87,7 @@ const CollectionDetail = () => {
                     images: data.images || [],
                     order: data.order || 0
                 })
-
-                if (data.handle) {
-                    fetchProducts(data.handle)
-                }
+                if (data.handle) fetchProducts(data.handle)
             } else {
                 toast.error('Collection not found')
                 router.push('/collections')
@@ -95,11 +108,11 @@ const CollectionDetail = () => {
             if (response.ok) {
                 setProducts(data.products || [])
             } else {
-                toast.error("Failed to load products")
+                toast.error('Failed to load products')
             }
         } catch (error) {
-            console.error("Error fetching products:", error)
-            toast.error("Error loading products")
+            console.error('Error fetching products:', error)
+            toast.error('Error loading products')
         } finally {
             setProductsLoading(false)
         }
@@ -109,16 +122,26 @@ const CollectionDetail = () => {
         setFormData(prev => ({ ...prev, [field]: value }))
     }
 
-    const handleImageUpload = (result, imageIndex) => {
-        const newImage = {
-            public_id: result.info.public_id,
-            asset_id: result.info.asset_id,
-            url: result.info.secure_url
+    const handleImageUpload = async (file, imageIndex) => {
+        if (!file) return
+        try {
+            setUploadingImages(prev => ({ ...prev, [imageIndex]: true }))
+            const uploaded = await uploadFileToS3(file, { folder: 'collections' })
+            const newImage = {
+                public_id: uploaded.public_id,
+                asset_id: uploaded.asset_id,
+                url: uploaded.secure_url || uploaded.url
+            }
+            const updatedImages = [...formData.images]
+            updatedImages[imageIndex] = newImage
+            handleInputChange('images', updatedImages)
+            toast.success(`Image ${imageIndex + 1} uploaded`)
+        } catch (error) {
+            console.error('Collection image upload error:', error)
+            toast.error(error.message || 'Failed to upload image')
+        } finally {
+            setUploadingImages(prev => ({ ...prev, [imageIndex]: false }))
         }
-
-        const updatedImages = [...formData.images]
-        updatedImages[imageIndex] = newImage
-        handleInputChange('images', updatedImages)
     }
 
     const removeImage = (imageIndex) => {
@@ -148,29 +171,22 @@ const CollectionDetail = () => {
             toast.error('Please fill in all required fields')
             return
         }
-
         try {
             setSaving(true)
             const url = isNewCollection
                 ? `/api/collection/create-collection?token=${user?.token}`
                 : `/api/collection/update-collection?id=${collectionId}&token=${user?.token}`
 
-            const method = isNewCollection ? 'POST' : 'PUT'
-
             const response = await fetch(url, {
-                method,
+                method: isNewCollection ? 'POST' : 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData)
             })
 
             if (response.ok) {
-                const action = isNewCollection ? 'Created a Collection' : 'Updated a Collection'
-                await createHistory(action)
+                await createHistory(isNewCollection ? 'Created a Collection' : 'Updated a Collection')
                 toast.success(`Collection ${isNewCollection ? 'created' : 'updated'} successfully!`)
-
-                if (isNewCollection) {
-                    router.push('/collections')
-                }
+                if (isNewCollection) router.push('/collections')
             } else {
                 toast.error(`Unable to ${isNewCollection ? 'create' : 'update'} collection`)
             }
@@ -184,12 +200,11 @@ const CollectionDetail = () => {
 
     const deleteCollection = async () => {
         if (!window.confirm(`Are you sure you want to delete "${formData.title}"?`)) return
-
         try {
-            const response = await fetch(`/api/collection/delete-collection?id=${collectionId}&token=${user?.token}`, {
-                method: 'DELETE'
-            })
-
+            const response = await fetch(
+                `/api/collection/delete-collection?id=${collectionId}&token=${user?.token}`,
+                { method: 'DELETE' }
+            )
             if (response.ok) {
                 await createHistory('Deleted a Collection')
                 toast.success('Collection deleted successfully')
@@ -208,64 +223,53 @@ const CollectionDetail = () => {
             const res = await fetch(`/api/products/export?collection=${formData.handle}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-            });
-
+            })
             if (!res.ok) {
-                const errorData = await res.json();
-                throw new Error(errorData.error || 'Export failed');
+                const errorData = await res.json()
+                throw new Error(errorData.error || 'Export failed')
             }
-
-            const blob = await res.blob();
-            const downloadUrl = URL.createObjectURL(blob);
-
-            const link = document.createElement('a');
-            link.href = downloadUrl;
-            link.download = `products-${formData.handle}.xlsx`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(downloadUrl);
-            toast.success("Excel file downloaded successfully!");
-
+            const blob = await res.blob()
+            const downloadUrl = URL.createObjectURL(blob)
+            const link = document.createElement('a')
+            link.href = downloadUrl
+            link.download = `products-${formData.handle}.xlsx`
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+            URL.revokeObjectURL(downloadUrl)
+            toast.success('Excel file downloaded successfully!')
         } catch (error) {
-            console.error('Export error:', error);
-            toast.error(error.message || "Failed to export data");
+            console.error('Export error:', error)
+            toast.error(error.message || 'Failed to export data')
         }
-    };
+    }
 
-    // Drag & Drop Handlers
     const handleOnDragEnd = (result) => {
-        if (!result.destination) return;
-        const newItems = Array.from(products);
-        const [reorderedItem] = newItems.splice(result.source.index, 1);
-        newItems.splice(result.destination.index, 0, reorderedItem);
-        setProducts(newItems);
-    };
+        if (!result.destination) return
+        const newItems = Array.from(products)
+        const [reorderedItem] = newItems.splice(result.source.index, 1)
+        newItems.splice(result.destination.index, 0, reorderedItem)
+        setProducts(newItems)
+    }
 
     const handleSaveOrder = async () => {
         try {
-            const productIds = products.map(item => item._id);
+            const productIds = products.map(item => item._id)
             const response = await fetch('/api/products/reorder', {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ productIds })
-            });
+            })
             if (response.ok) {
-                toast.success('Product order saved successfully!');
+                toast.success('Product order saved successfully!')
             } else {
-                throw new Error('Failed to save order');
+                throw new Error('Failed to save order')
             }
         } catch (error) {
-            console.error('Failed to save order:', error);
-            toast.error('Failed to save product order.');
+            console.error('Failed to save order:', error)
+            toast.error('Failed to save product order.')
         }
-    };
-
-    const modifyCloudinaryUrl = (url) => {
-        if (!url) return '/placeholder.png';
-        const urlParts = url.split('/upload/');
-        return `${urlParts[0]}/upload/c_limit,h_100,f_auto,q_50/${urlParts[1]}`;
-    };
+    }
 
     if (loading) {
         return (
@@ -316,13 +320,10 @@ const CollectionDetail = () => {
             </div>
 
             <div className={styles.content}>
-                {/* Left Column - Collection Details */}
+                {/* Left Column */}
                 <div className={styles.leftColumn}>
                     <section className={styles.section}>
-                        <h2>
-                            <Settings size={20} />
-                            Basic Information
-                        </h2>
+                        <h2><Settings size={20} />Basic Information</h2>
                         <div className={styles.formGrid}>
                             <div className={styles.field}>
                                 <label>Title *</label>
@@ -355,16 +356,17 @@ const CollectionDetail = () => {
                     </section>
 
                     <section className={styles.section}>
-                        <h2>
-                            <Image size={20} />
-                            Collection Images
-                        </h2>
+                        <h2><Image size={20} />Collection Images</h2>
                         <div className={styles.imagesGrid}>
                             {[0, 1].map((index) => (
                                 <div key={index} className={styles.imageUpload}>
                                     {formData.images[index] ? (
                                         <div className={styles.imagePreview}>
-                                            <img src={formData.images[index].url} alt={`Collection ${index + 1}`} />
+                                            {/* ✅ FIX: getImageUrl applied to collection preview images */}
+                                            <img
+                                                src={getImageUrl(formData.images[index].url)}
+                                                alt={`Collection ${index + 1}`}
+                                            />
                                             <button
                                                 onClick={() => removeImage(index)}
                                                 className={styles.removeImage}
@@ -373,41 +375,17 @@ const CollectionDetail = () => {
                                             </button>
                                         </div>
                                     ) : (
-                                        !canRenderWidget ? (
-                                            <button className={styles.uploadButton} disabled>
-                                                <Upload size={24} />
-                                                Upload disabled (Cloudinary env missing)
-                                            </button>
-                                        ) : !isWidgetMounted ? (
-                                            <button className={styles.uploadButton} disabled>
-                                                <Upload size={24} />
-                                                Preparing uploader...
-                                            </button>
-                                        ) : (
-                                            <CldUploadWidget
-                                                config={{
-                                                    cloud: {
-                                                        cloudName,
-                                                        ...(useSignedUploads ? { apiKey } : {}),
-                                                    },
-                                                }}
-                                                uploadPreset={uploadPreset}
-                                                {...(useSignedUploads ? { signatureEndpoint: '/api/upload/upload-img' } : {})}
-                                                onSuccess={(result) => handleImageUpload(result, index)}
-                                                options={{
-                                                    cloudName,
-                                                    uploadPreset,
-                                                    sources: ['local', 'url', 'camera'],
-                                                }}
-                                            >
-                                                {({ open }) => (
-                                                    <button onClick={() => open()} className={styles.uploadButton}>
-                                                        <Upload size={24} />
-                                                        Upload Image {index + 1}
-                                                    </button>
-                                                )}
-                                            </CldUploadWidget>
-                                        )
+                                        <label className={styles.uploadButton}>
+                                            <Upload size={24} />
+                                            {uploadingImages[index] ? 'Uploading...' : `Upload Image ${index + 1}`}
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                hidden
+                                                disabled={Boolean(uploadingImages[index])}
+                                                onChange={(e) => handleImageUpload(e.target.files?.[0], index)}
+                                            />
+                                        </label>
                                     )}
                                 </div>
                             ))}
@@ -415,10 +393,7 @@ const CollectionDetail = () => {
                     </section>
 
                     <section className={styles.section}>
-                        <h2>
-                            <BarChart3 size={20} />
-                            SEO Information
-                        </h2>
+                        <h2><BarChart3 size={20} />SEO Information</h2>
                         <div className={`${styles.formGrid} ${styles.seo}`}>
                             <div className={styles.field}>
                                 <label>Meta Title</label>
@@ -442,13 +417,10 @@ const CollectionDetail = () => {
                     </section>
                 </div>
 
-                {/* Right Column - Settings */}
+                {/* Right Column */}
                 <div className={styles.rightColumn}>
                     <section className={styles.section}>
-                        <h2>
-                            <Settings size={20} />
-                            Collection Settings
-                        </h2>
+                        <h2><Settings size={20} />Collection Settings</h2>
                         <div className={styles.settingsGrid}>
                             <div className={styles.field}>
                                 <label>Status</label>
@@ -526,7 +498,11 @@ const CollectionDetail = () => {
                                             className={styles.productsList}
                                         >
                                             {products.map((product, index) => (
-                                                <Draggable key={product._id} draggableId={product._id} index={index}>
+                                                <Draggable
+                                                    key={product._id}
+                                                    draggableId={product._id}
+                                                    index={index}
+                                                >
                                                     {(provided, snapshot) => (
                                                         <div
                                                             ref={provided.innerRef}
@@ -534,8 +510,9 @@ const CollectionDetail = () => {
                                                             {...provided.dragHandleProps}
                                                             className={`${styles.productItem} ${snapshot.isDragging ? styles.dragging : ''}`}
                                                         >
+                                                            {/* ✅ FIX: getImageUrl applied to product list images */}
                                                             <img
-                                                                src={modifyCloudinaryUrl(product.images?.[0]?.url)}
+                                                                src={getImageUrl(product.images?.[0]?.url)}
                                                                 alt={product.title}
                                                                 className={styles.productImage}
                                                             />

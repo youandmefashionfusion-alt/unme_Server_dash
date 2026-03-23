@@ -87,6 +87,34 @@ export const useProductForm = (productId, isNew = false) => {
   }, []);
 
   // Fetch single product
+  // Transform S3 URLs to CloudFront
+  const transformImageUrls = useCallback((images) => {
+    if (!Array.isArray(images)) return [];
+    const cloudfront = process.env.NEXT_PUBLIC_CLOUDFRONT_URL || 'https://d2gtpgxs0y565n.cloudfront.net';
+    
+    return images.map(image => {
+      if (!image?.url) return image;
+      
+      const url = image.url;
+      
+      // Check if it's an S3 URL - convert to CloudFront
+      if (url.includes('s3.') || url.includes('amazonaws.com')) {
+        try {
+          const urlObj = new URL(url);
+          const pathname = urlObj.pathname;
+          return {
+            ...image,
+            url: `${cloudfront}${pathname}`
+          };
+        } catch (e) {
+          return image;
+        }
+      }
+      
+      return image;
+    });
+  }, []);
+
   const fetchProduct = useCallback(async () => {
     if (isNew) return;
 
@@ -107,6 +135,9 @@ export const useProductForm = (productId, isNew = false) => {
             ? product.ringSize
             : [];
 
+        // ✅ Transform image URLs from S3 to CloudFront
+        const transformedImages = transformImageUrls(product.images || []);
+
         setFormData({
           title: product.title || '',
           state: product.state || 'draft',
@@ -120,7 +151,7 @@ export const useProductForm = (productId, isNew = false) => {
           crossPrice: product.crossPrice || '',
           isFeatured: product.isFeatured || false,
           sku: product.sku || '',
-          images: product.images || [],
+          images: transformedImages,
           collectionName: product.collectionName?._id || '',
           collectionHandle: product.collectionHandle || '',
           quantity: product.quantity || 0,
@@ -160,7 +191,7 @@ export const useProductForm = (productId, isNew = false) => {
     } finally {
       setLoading(false);
     }
-  }, [productId, isNew]);
+  }, [productId, isNew, transformImageUrls]);
 
   // Handle input change
   const handleInputChange = useCallback((field, value) => {

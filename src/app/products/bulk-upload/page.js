@@ -45,8 +45,8 @@ const BulkUploadPage = () => {
       .replace(/^-|-$/g, '');
   }, []);
 
-  // Upload image to Cloudinary
-  const uploadImageToCloudinary = useCallback(async (imageUrl) => {
+  // Upload image URL to S3 via backend
+  const uploadImageToS3 = useCallback(async (imageUrl) => {
     try {
       let directUrl = imageUrl;
       if (imageUrl.includes('drive.google.com')) {
@@ -74,7 +74,7 @@ const BulkUploadPage = () => {
       }
       throw new Error(data.message || 'Upload failed');
     } catch (error) {
-      console.error('Cloudinary upload error:', error);
+      console.error('S3 upload error:', error);
       throw error;
     }
   }, []);
@@ -223,7 +223,7 @@ const BulkUploadPage = () => {
         const uploadedImages = [];
         for (const url of product.imageUrls.slice(0, 5)) { // Limit to 5 images
           try {
-            const uploaded = await uploadImageToCloudinary(url);
+            const uploaded = await uploadImageToS3(url);
             uploadedImages.push(uploaded);
           } catch (err) {
             console.error(`Failed to upload image: ${url}`, err);

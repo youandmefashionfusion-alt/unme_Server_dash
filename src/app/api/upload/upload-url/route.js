@@ -1,82 +1,119 @@
-// app/api/upload/upload-url/route.js
-import { v2 as cloudinary } from 'cloudinary';
+import { randomUUID } from "crypto";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import s3Client from "../../../../../config/s3";
 
-cloudinary.config({
-  cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+export const runtime = "nodejs";
+export const config = {
+  maxDuration: 30,
+};
+
+const sanitize = (value = "") =>
+  String(value)
+    .trim()
+    .replace(/^\/+|\/+$/g, "")
+    .replace(/[^a-zA-Z0-9/_-]/g, "-");
+
+const getPublicBaseUrl = () => {
+  if (process.env.AWS_S3_PUBLIC_BASE_URL) {
+    return process.env.AWS_S3_PUBLIC_BASE_URL.replace(/\/$/, "");
+  }
+  if (process.env.CLOUDFRONT_URL) {
+    return process.env.CLOUDFRONT_URL.replace(/\/$/, "");
+  }
+  const bucket = process.env.AWS_S3_BUCKET || process.env.AWS_S3_BUCKET_NAME;
+  const region = process.env.AWS_S3_REGION || process.env.AWS_REGION;
+  return `https://${bucket}.s3.${region}.amazonaws.com`;
+};
+
+const normalizeDriveUrl = (url) => {
+  if (!url.includes("drive.google.com")) return url;
+  const fileId =
+    url.match(/\/d\/([^/]+)/)?.[1] ||
+    url.match(/[?&]id=([^&]+)/)?.[1];
+  if (!fileId) return url;
+  return `https://drive.google.com/uc?export=download&id=${fileId}`;
+};
+
+const extensionFromType = (contentType) => {
+  if (!contentType) return "";
+  if (contentType.includes("jpeg")) return "jpg";
+  if (contentType.includes("png")) return "png";
+  if (contentType.includes("webp")) return "webp";
+  if (contentType.includes("gif")) return "gif";
+  if (contentType.includes("avif")) return "avif";
+  if (contentType.includes("mp4")) return "mp4";
+  return "";
+};
 
 export async function POST(req) {
   try {
-    // Debug: Check if environment variables are loaded
-    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-    const apiKey = process.env.CLOUDINARY_API_KEY;
-    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+    const bucket = process.env.AWS_S3_BUCKET || process.env.AWS_S3_BUCKET_NAME;
+    const region = process.env.AWS_S3_REGION || process.env.AWS_REGION;
 
-    console.log('Cloudinary Config Check:', {
-      hasCloudName: !!cloudName,
-      hasApiKey: !!apiKey,
-      hasApiSecret: !!apiSecret,
-    });
-
-    if (!cloudName || !apiKey || !apiSecret) {
+    if (!bucket || !region) {
       return Response.json(
-        {
-          success: false,
-          message: 'Cloudinary credentials not configured properly',
-          missing: {
-            cloudName: !cloudName,
-            apiKey: !apiKey,
-            apiSecret: !apiSecret,
-          },
-        },
+        { success: false, message: "AWS S3 env vars are missing" },
         { status: 500 }
       );
     }
 
-    const { imageUrl } = await req.json();
-
+    const { imageUrl, folder } = await req.json();
     if (!imageUrl) {
       return Response.json(
-        { success: false, message: 'Image URL is required' },
+        { success: false, message: "Image URL is required" },
         { status: 400 }
       );
     }
 
-    console.log('Attempting to upload:', imageUrl);
+    const sourceUrl = normalizeDriveUrl(String(imageUrl).trim());
+    const sourceResponse = await fetch(sourceUrl, { method: "GET" });
+    if (!sourceResponse.ok) {
+      return Response.json(
+        {
+          success: false,
+          message: `Unable to fetch source image (${sourceResponse.status})`,
+        },
+        { status: 400 }
+      );
+    }
 
-    // Upload the image from URL to Cloudinary
-    const result = await cloudinary.uploader.upload(imageUrl, {
-      folder: 'products',
-      resource_type: 'auto',
-      timeout: 60000, // 60 seconds timeout
-      api_key: apiKey,
-      api_secret: apiSecret,
-      cloud_name: cloudName,
-    });
+    const contentType =
+      sourceResponse.headers.get("content-type") || "application/octet-stream";
+    const arrayBuffer = await sourceResponse.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
-    console.log('Upload successful:', result.public_id);
+    const safeFolder = sanitize(folder || "products");
+    const ext = extensionFromType(contentType);
+    const objectKey = `${safeFolder}/${Date.now()}-${randomUUID()}${ext ? `.${ext}` : ""}`;
 
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: objectKey,
+        Body: buffer,
+        ContentType: contentType,
+      })
+    );
+
+    const url = `${getPublicBaseUrl()}/${objectKey}`;
     return Response.json(
       {
         success: true,
         result: {
-          public_id: result.public_id,
-          secure_url: result.secure_url,
-          asset_id: result.asset_id,
-          url: result.url,
+          public_id: objectKey,
+          secure_url: url,
+          asset_id: objectKey,
+          url,
         },
       },
       { status: 200 }
     );
   } catch (error) {
-    console.error('Cloudinary upload error:', error);
+    console.error("S3 upload-url error:", error);
     return Response.json(
       {
         success: false,
-        message: error.message || 'Failed to upload image',
-        error: error.toString(),
+        message: error.message || "Failed to upload image URL to S3",
       },
       { status: 500 }
     );

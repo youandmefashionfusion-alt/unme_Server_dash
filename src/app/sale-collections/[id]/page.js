@@ -7,8 +7,8 @@ import {
     ArrowLeft, Save, Trash2, Upload, X, Image, BarChart3, Settings,
     Download
 } from 'lucide-react'
-import { CldUploadWidget } from 'next-cloudinary'
 import toast from 'react-hot-toast'
+import { uploadFileToS3 } from '@/lib/uploadToS3'
 
 const CollectionDetail = () => {
     const params = useParams()
@@ -30,6 +30,7 @@ const CollectionDetail = () => {
 
     const [loading, setLoading] = useState(false)
     const [saving, setSaving] = useState(false)
+    const [uploadingImages, setUploadingImages] = useState({})
 
     useEffect(() => {
         if (!isNewCollection && collectionId) {
@@ -70,16 +71,28 @@ const CollectionDetail = () => {
         setFormData(prev => ({ ...prev, [field]: value }))
     }
 
-    const handleImageUpload = (result, imageIndex) => {
-        const newImage = {
-            public_id: result.info.public_id,
-            asset_id: result.info.asset_id,
-            url: result.info.secure_url
-        }
+    const handleImageUpload = async (file, imageIndex) => {
+        if (!file) return
 
-        const updatedImages = [...formData.images]
-        updatedImages[imageIndex] = newImage
-        handleInputChange('images', updatedImages)
+        try {
+            setUploadingImages((prev) => ({ ...prev, [imageIndex]: true }))
+            const uploaded = await uploadFileToS3(file, { folder: 'sale-collections' })
+            const newImage = {
+                public_id: uploaded.public_id,
+                asset_id: uploaded.asset_id,
+                url: uploaded.secure_url || uploaded.url
+            }
+
+            const updatedImages = [...formData.images]
+            updatedImages[imageIndex] = newImage
+            handleInputChange('images', updatedImages)
+            toast.success(`Image ${imageIndex + 1} uploaded`)
+        } catch (error) {
+            console.error('Sale collection image upload error:', error)
+            toast.error(error.message || 'Failed to upload image')
+        } finally {
+            setUploadingImages((prev) => ({ ...prev, [imageIndex]: false }))
+        }
     }
 
     const removeImage = (imageIndex) => {
@@ -256,17 +269,17 @@ const CollectionDetail = () => {
                                             </button>
                                         </div>
                                     ) : (
-                                        <CldUploadWidget
-                                            signatureEndpoint="/api/upload/upload-img"
-                                            onSuccess={(result) => handleImageUpload(result, index)}
-                                        >
-                                            {({ open }) => (
-                                                <button onClick={open} className={styles.uploadButton}>
-                                                    <Upload size={24} />
-                                                    Upload Image {index + 1}
-                                                </button>
-                                            )}
-                                        </CldUploadWidget>
+                                        <label className={styles.uploadButton}>
+                                            <Upload size={24} />
+                                            {uploadingImages[index] ? 'Uploading...' : `Upload Image ${index + 1}`}
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                hidden
+                                                disabled={Boolean(uploadingImages[index])}
+                                                onChange={(e) => handleImageUpload(e.target.files?.[0], index)}
+                                            />
+                                        </label>
                                     )}
                                 </div>
                             ))}

@@ -67,8 +67,25 @@ const CollectionsPage = () => {
 
     const modifyCloudinaryUrl = (url) => {
         if (!url) return '/placeholder-image.jpg'
+        const cloudfront = process.env.NEXT_PUBLIC_CLOUDFRONT_URL || 'https://d2gtpgxs0y565n.cloudfront.net';
+        
+        // Check if it's an S3 URL - convert to CloudFront
+        if (url.includes('s3.') || url.includes('amazonaws.com')) {
+            try {
+                const urlObj = new URL(url);
+                const pathname = urlObj.pathname;
+                return `${cloudfront}${pathname}`;
+            } catch (e) {
+                return url;
+            }
+        }
+        
+        // Apply Cloudinary transformations for Cloudinary URLs
         const urlParts = url.split('/upload/')
-        return `${urlParts[0]}/upload/c_limit,h_300,f_auto,q_60/${urlParts[1]}`
+        if (urlParts.length === 2) {
+            return `${urlParts[0]}/upload/c_limit,h_300,f_auto,q_60/${urlParts[1]}`
+        }
+        return url
     }
 
     if (loading) {

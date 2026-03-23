@@ -3,9 +3,9 @@ import React, { useEffect, useState, useCallback } from "react";
 import styles from "./banners.module.css";
 import { X, Save, Plus, Trash2, Eye, Upload, Monitor, Smartphone, Globe } from "lucide-react";
 import Image from "next/image";
-import { CldUploadWidget } from "next-cloudinary";
 import toast from "react-hot-toast";
 import { useSelector } from "react-redux";
+import { uploadFileToS3 } from "@/lib/uploadToS3";
 
 const Banners = () => {
   const [activeTab, setActiveTab] = useState('desktop');
@@ -27,10 +27,26 @@ const Banners = () => {
     link: ""
   }), []);
 
-  const modifyCloudinaryUrl = useCallback((url) => {
-    if (!url) return '';
-    const urlParts = url.split('/upload/');
-    return `${urlParts[0]}/upload/c_limit,h_1000,f_auto,q_50/${urlParts[1]}`;
+  const getPreviewImageUrl = useCallback((url) => {
+    if (!url) return "";
+    const cloudfront = process.env.NEXT_PUBLIC_CLOUDFRONT_URL || 'https://d2gtpgxs0y565n.cloudfront.net';
+    
+    // Check if it's an S3 URL - convert to CloudFront
+    if (url.includes('s3.') || url.includes('amazonaws.com')) {
+      try {
+        const urlObj = new URL(url);
+        const pathname = urlObj.pathname;
+        return `${cloudfront}${pathname}`;
+      } catch (e) {
+        return url;
+      }
+    }
+    
+    if (url.includes("res.cloudinary.com") && url.includes("/upload/")) {
+      const urlParts = url.split("/upload/");
+      return `${urlParts[0]}/upload/c_limit,h_1000,f_auto,q_50/${urlParts[1]}`;
+    }
+    return url;
   }, []);
 
   useEffect(() => {
@@ -75,15 +91,27 @@ const Banners = () => {
     fetchBanners();
   }, [createEmptyBanner, activeTab]);
 
-  const handleImageUpload = useCallback((result, index) => {
-    if (result?.event !== "success") return;
+  const handleImageUpload = useCallback(async (file, index) => {
+    if (!file) return;
 
-    setBanners(prev => ({
-      ...prev,
-      [activeTab]: prev[activeTab].map((banner, i) =>
-        i === index ? { ...banner, url: result.info.secure_url } : banner
-      )
-    }));
+    try {
+      const uploaded = await uploadFileToS3(file, { folder: `banners/${activeTab}` });
+      const nextUrl = uploaded?.secure_url || uploaded?.url || "";
+      if (!nextUrl) {
+        throw new Error("Missing uploaded image URL");
+      }
+
+      setBanners((prev) => ({
+        ...prev,
+        [activeTab]: prev[activeTab].map((banner, i) =>
+          i === index ? { ...banner, url: nextUrl } : banner
+        ),
+      }));
+      toast.success("Banner image uploaded");
+    } catch (error) {
+      console.error("Banner upload error:", error);
+      toast.error(error.message || "Failed to upload banner image");
+    }
   }, [activeTab]);
 
   const handleInputChange = useCallback((index, field, value) => {
@@ -274,7 +302,7 @@ const Banners = () => {
             onInputChange={handleInputChange}
             onImageRemove={handleImageRemove}
             onRemoveBanner={removeBanner}
-            modifyCloudinaryUrl={modifyCloudinaryUrl}
+            getPreviewImageUrl={getPreviewImageUrl}
           />
         ))}
       </div>
@@ -310,7 +338,7 @@ const BannerCard = React.memo(({
   onInputChange,
   onImageRemove,
   onRemoveBanner,
-  modifyCloudinaryUrl
+  getPreviewImageUrl
 }) => {
   const getRecommendedSize = () => {
     switch (activeTab) {
@@ -353,7 +381,7 @@ const BannerCard = React.memo(({
               <X size={16} />
             </button>
             <Image
-              src={modifyCloudinaryUrl(banner.url)}
+              src={getPreviewImageUrl(banner.url)}
               alt={`${activeTab} banner ${index + 1}`}
               width={400}
               height={200}
@@ -361,24 +389,20 @@ const BannerCard = React.memo(({
             />
           </div>
         ) : (
-          <CldUploadWidget
-            signatureEndpoint="/api/upload/upload-img"
-            onSuccess={(result) => onImageUpload(result, index)}
-          >
-            {({ open }) => (
-              <button
-                onClick={open}
-                className={styles.uploadButton}
-                disabled={saving}
-              >
-                <Upload size={24} />
-                <span>Upload Banner Image</span>
-                <span className={styles.uploadHint}>
-                  Recommended: {getRecommendedSize()}
-                </span>
-              </button>
-            )}
-          </CldUploadWidget>
+          <label className={styles.uploadButton}>
+            <Upload size={24} />
+            <span>Upload Banner Image</span>
+            <span className={styles.uploadHint}>
+              Recommended: {getRecommendedSize()}
+            </span>
+            <input
+              type="file"
+              accept="image/*"
+              hidden
+              disabled={saving}
+              onChange={(e) => onImageUpload(e.target.files?.[0], index)}
+            />
+          </label>
         )}
       </div>
 

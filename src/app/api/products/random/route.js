@@ -6,15 +6,15 @@ export async function GET() {
     try {
         await connectDb();
 
-        // your 7 image links
+        // sample image links for random assignment
         const imageLinks = [
-            "https://res.cloudinary.com/dkfkwavmc/image/upload/v1762884128/MA-48102381001_1_h2ykfe.jpg",
-            "https://res.cloudinary.com/dkfkwavmc/image/upload/v1762884154/1662045248_c0a2b802b8ff3e7ae2fa_owj6vq.png",
-            "https://res.cloudinary.com/dkfkwavmc/image/upload/v1762884173/IMG_2638_83ca4948-6d4a-4196-af06-990c4cb4c16f_lk3br7.jpg",
-            "https://res.cloudinary.com/dkfkwavmc/image/upload/v1762884197/1659169825_184c8850aa0aee753be5_a5pkwr.jpg",
-            "https://res.cloudinary.com/dkfkwavmc/image/upload/v1762884213/2_Line_Heavy_Bridal_Pearl_Hanging_Necklace_with_Diamond_Look_1200x1200_vc4b21.jpg",
-            "https://res.cloudinary.com/dkfkwavmc/image/upload/v1762884241/C001952__1_ivmyhu.jpg",
-            "https://res.cloudinary.com/dkfkwavmc/image/upload/v1762884278/artificial-design-bridal-hairpin-hair-clip-hair-accessories-1-original-imaghet2sxg5wgkq_crpajy.jpg"
+            "https://cdn.shopify.com/s/files/1/0652/8542/3187/files/IMG_0480.heic?v=1752684372",
+            "https://cdn.shopify.com/s/files/1/0652/8542/3187/files/IMG_0480.heic?v=1752684372",
+            "https://cdn.shopify.com/s/files/1/0652/8542/3187/files/IMG_0480.heic?v=1752684372",
+            "https://cdn.shopify.com/s/files/1/0652/8542/3187/files/IMG_0480.heic?v=1752684372",
+            "https://cdn.shopify.com/s/files/1/0652/8542/3187/files/IMG_0480.heic?v=1752684372",
+            "https://cdn.shopify.com/s/files/1/0652/8542/3187/files/IMG_0480.heic?v=1752684372",
+            "https://cdn.shopify.com/s/files/1/0652/8542/3187/files/IMG_0480.heic?v=1752684372"
         ];
 
         // fetch all products

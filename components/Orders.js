@@ -126,8 +126,26 @@ export default function OrdersPage() {
 
   const modifyImageUrl = (url) => {
     if (!url) return '/placeholder.jpg';
+    const cloudfront = process.env.NEXT_PUBLIC_CLOUDFRONT_URL || process.env.CLOUDFRONT_URL || 'https://d2gtpgxs0y565n.cloudfront.net';
+    
+    // Check if it's an S3 URL - convert to CloudFront
+    if (url.includes('s3.') || url.includes('amazonaws.com')) {
+      try {
+        const urlObj = new URL(url);
+        const pathname = urlObj.pathname;
+        return `${cloudfront}${pathname}`;
+      } catch (e) {
+        return url;
+      }
+    }
+    
+    // Apply Cloudinary transformations for Cloudinary URLs
     const parts = url.split('/upload/');
-    return `${parts[0]}/upload/c_limit,h_80,f_auto,q_60/${parts[1]}`;
+    if (parts.length === 2) {
+      return `${parts[0]}/upload/c_limit,h_80,f_auto,q_60/${parts[1]}`;
+    }
+    
+    return url; // Fallback to original URL
   };
 
   const getStatusClass = (order) => {
