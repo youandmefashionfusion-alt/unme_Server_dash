@@ -15,6 +15,8 @@ import styles from '../orders.module.css';
 import toast from 'react-hot-toast';
 import { usePDF } from 'react-to-pdf';
 
+const FREE_SHIPPING_THRESHOLD = 999;
+
 export default function OrderDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -40,6 +42,14 @@ export default function OrderDetailPage() {
 
   const { toPDF, targetRef } = usePDF({
     filename: `packing-slip-${order?.orderNumber}.pdf`,
+    page: {
+      margin: { top: 8, right: 12, bottom: 8, left: 12 },
+      format: 'A4',
+      orientation: 'portrait',
+    },
+    canvas: {
+      useCORS: true,
+    },
   });
 
   const handleDownloadPackingSlip = async () => {
@@ -64,6 +74,14 @@ export default function OrderDetailPage() {
   // Add second PDF ref
   const { toPDF: toPDF2, targetRef: targetRef2 } = usePDF({
     filename: `order-slip-${order?.orderNumber}.pdf`,
+    page: {
+      margin: { top: 12, right: 12, bottom: 8, left: 12 },
+      format: 'A4',
+      orientation: 'portrait',
+    },
+    canvas: {
+      useCORS: true,
+    },
   });
 
   // Handler for Slip 2
@@ -312,25 +330,66 @@ export default function OrderDetailPage() {
 
   const modifyCloudinaryUrl = (url) => {
     if (!url) return '/placeholder-image.jpg';
-    const cloudfront = process.env.NEXT_PUBLIC_CLOUDFRONT_URL || 'https://d2gtpgxs0y565n.cloudfront.net';
-    
-    // Check if it's an S3 URL - convert to CloudFront
-    if (url.includes('s3.') || url.includes('amazonaws.com')) {
+
+    const sanitizedUrl = String(url).trim().replace(/^\/\//, 'https://').replace(/^http:\/\//, 'https://');
+    const cloudfront = process.env.NEXT_PUBLIC_CLOUDFRONT_URL;
+
+    // Convert S3 URL to CloudFront only when CloudFront is configured.
+    if ((sanitizedUrl.includes('s3.') || sanitizedUrl.includes('amazonaws.com')) && cloudfront) {
       try {
-        const urlObj = new URL(url);
+        const urlObj = new URL(sanitizedUrl);
         const pathname = urlObj.pathname;
-        return `${cloudfront}${pathname}`;
+        const normalizedCloudfront = cloudfront.replace(/\/$/, '');
+        return `${normalizedCloudfront}${pathname}`;
       } catch (e) {
-        return url;
+        return sanitizedUrl;
       }
     }
-    
+
+    // For direct S3 URLs without CloudFront, use original URL.
+    if (sanitizedUrl.includes('s3.') || sanitizedUrl.includes('amazonaws.com')) {
+      return sanitizedUrl;
+    }
+
     // Apply Cloudinary transformations for Cloudinary URLs
-    const urlParts = url.split('/upload/');
+    const urlParts = sanitizedUrl.split('/upload/');
     if (urlParts.length === 2) {
       return `${urlParts[0]}/upload/c_limit,h_300,f_auto,q_60/${urlParts[1]}`;
     }
-    return url;
+    return sanitizedUrl;
+  };
+
+  const handleSlipImageError = (event) => {
+    if (!event?.currentTarget?.src?.includes('/placeholder-image.jpg')) {
+      event.currentTarget.src = '/placeholder-image.jpg';
+    }
+  };
+
+  const getProductImageUrl = (product) => {
+    const firstImage = product?.images?.[0];
+
+    if (typeof firstImage === 'string') {
+      return modifyCloudinaryUrl(firstImage);
+    }
+
+    const resolvedUrl =
+      firstImage?.url ||
+      firstImage?.secure_url ||
+      firstImage?.src ||
+      product?.thumbnail ||
+      '';
+
+    return modifyCloudinaryUrl(resolvedUrl);
+  };
+
+  const getSlipImageUrl = (product) => {
+    const resolved = getProductImageUrl(product);
+
+    if (!resolved || resolved.startsWith('/')) {
+      return resolved || '/placeholder-image.jpg';
+    }
+
+    return `/api/image-proxy?url=${encodeURIComponent(resolved)}`;
   };
 
   const getStatusClass = () => {
@@ -344,6 +403,31 @@ export default function OrderDetailPage() {
     if (order.orderStatus === 'Cancelled') return 'Cancelled';
     return order.orderType === 'COD' ? 'Cash on Delivery' : 'Prepaid';
   };
+
+  const getSafeNumber = (value) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const orderSubtotal = getSafeNumber(order?.totalPrice);
+  const orderShippingCost = getSafeNumber(order?.shippingCost);
+  const orderDiscount = Math.max(getSafeNumber(order?.discount), 0);
+  const orderFinalAmount = getSafeNumber(order?.finalAmount);
+
+  const derivedCodCharge =
+    order?.orderType === 'COD'
+      ? Math.max(
+          orderFinalAmount - (orderSubtotal + orderShippingCost - orderDiscount),
+          0
+        )
+      : 0;
+  const orderCodCharge = Math.round(derivedCodCharge);
+  const isFreeShipping = orderShippingCost === 0;
+  const freeShippingNote = isFreeShipping
+    ? orderSubtotal > FREE_SHIPPING_THRESHOLD
+      ? `Free shipping unlocked on orders above ₹${FREE_SHIPPING_THRESHOLD}`
+      : 'Free shipping applied via coupon/promotion'
+    : '';
 
   if (loading) {
     return (
@@ -419,7 +503,7 @@ export default function OrderDetailPage() {
             <Package size={16} />
             <span>{order.orderItems.length} items</span>
             <span className={styles.dot}>•</span>
-            <span className={styles.totalAmount}>{formatCurrency(order.finalAmount)}</span>
+            <span className={styles.totalAmount}>{formatCurrency(orderFinalAmount)}</span>
           </div>
         </div>
         <div className={styles.statusActions}>
@@ -489,9 +573,10 @@ export default function OrderDetailPage() {
                     href={`/products/${item?.product?.handle}`}>
                     <div key={index} className={styles.detailItem}>
                       <img
-                        src={modifyCloudinaryUrl(item.product?.images?.[0]?.url)}
+                        src={getProductImageUrl(item?.product)}
                         alt={item.product?.title}
                         className={styles.detailItemImage}
+                        onError={handleSlipImageError}
                       />
                       <div className={styles.detailItemInfo}>
                         <h4>{item.product?.title}</h4>
@@ -517,19 +602,28 @@ export default function OrderDetailPage() {
               <div className={styles.paymentSummary}>
                 <div className={styles.summaryRow}>
                   <span>Subtotal</span>
-                  <span>{formatCurrency(order.totalPrice)}</span>
+                  <span>{formatCurrency(orderSubtotal)}</span>
                 </div>
                 <div className={styles.summaryRow}>
                   <span>Shipping</span>
-                  <span>{formatCurrency(order.shippingCost)}</span>
+                  <span>{isFreeShipping ? 'FREE' : formatCurrency(orderShippingCost)}</span>
                 </div>
+                {isFreeShipping && (
+                  <p className={styles.summaryNote}>{freeShippingNote}</p>
+                )}
+                {order.orderType === 'COD' && (
+                  <div className={styles.summaryRow}>
+                    <span>COD Charges</span>
+                    <span>{formatCurrency(orderCodCharge)}</span>
+                  </div>
+                )}
                 <div className={styles.summaryRow}>
-                  <span>Discount</span>
-                  <span>-{formatCurrency(order.discount)}</span>
+                  <span>Total Discount</span>
+                  <span>-{formatCurrency(orderDiscount)}</span>
                 </div>
                 <div className={styles.summaryTotal}>
                   <span>Total</span>
-                  <span>{formatCurrency(order.finalAmount)}</span>
+                  <span>{formatCurrency(orderFinalAmount)}</span>
                 </div>
                 <div className={styles.paymentMethod}>
                   <CreditCard size={16} />
@@ -823,11 +917,12 @@ export default function OrderDetailPage() {
       )}
 
       {/* Packing Slip (hidden, for PDF export) */}
-      <div id="packing-slip" ref={targetRef} style={{ position: 'absolute', top: '-9999px' }}>
-        <div className={styles.packingSlip}>
+      <div id="packing-slip" className={styles.pdfExportContainer}>
+        <div className={styles.packingSlip} ref={targetRef}>
           <div className={styles.packingHeader}>
             <div className={styles.brandSection}>
               <h2>UnMe Jewels</h2>
+              <p className={styles.brandSubtitle}>by divyam basics studio</p>
             </div>
             <div className={styles.orderMeta}>
               <div className={styles.orderNumber}>#{order.orderNumber}</div>
@@ -857,7 +952,8 @@ export default function OrderDetailPage() {
               <div className={styles.storeAddress}>
                 <strong>UnMe Jewels</strong>
                 <div>G-65, Sector 63, Noida</div>
-                <div>Uttar Pradesh - 201309</div>
+                <div>Uttar Pradesh - 201301</div>
+                <div>GSTIN: IN09AAXFD9660L1ZD</div>
                 <div className={styles.contactRow}>
                   <Phone size={10} />
                   <span>+91 9891565936</span>
@@ -897,9 +993,10 @@ export default function OrderDetailPage() {
               <div key={index} className={styles.packingTableRow}>
                 <div>
                   <img
-                    src={modifyCloudinaryUrl(item.product?.images?.[0]?.url)}
+                    src={getSlipImageUrl(item?.product)}
                     alt={item.product?.title}
                     className={styles.packingProductImage}
+                    onError={handleSlipImageError}
                   />
                 </div>
                 <div>
@@ -923,20 +1020,26 @@ export default function OrderDetailPage() {
             <div className={styles.packingSummaryBox}>
               <div className={styles.packingSummaryRow}>
                 <span>Subtotal</span>
-                <span>₹{order.totalPrice}</span>
+                <span>{formatCurrency(orderSubtotal)}</span>
               </div>
               <div className={styles.packingSummaryRow}>
                 <span>Shipping</span>
-                <span>₹{order.shippingCost}</span>
+                <span>{isFreeShipping ? 'FREE' : formatCurrency(orderShippingCost)}</span>
               </div>
+              {order.orderType === 'COD' && (
+                <div className={styles.packingSummaryRow}>
+                  <span>COD Charges</span>
+                  <span>{formatCurrency(orderCodCharge)}</span>
+                </div>
+              )}
               <div className={styles.packingSummaryRow}>
-                <span>Discount</span>
-                <span>-₹{order.discount}</span>
+                <span>Total Discount</span>
+                <span>-{formatCurrency(orderDiscount)}</span>
               </div>
               <div className={styles.packingSummaryTotal}>
                 <span>Total</span>
                 <span>
-                  ₹{order.finalAmount}
+                  {formatCurrency(orderFinalAmount)}
                   <span
                     className={`${styles.paymentStatus} ${order.orderType === 'Prepaid' ? styles.paid : styles.cod
                       }`}
@@ -953,7 +1056,7 @@ export default function OrderDetailPage() {
               <strong>Thank you, {order.shippingInfo.firstname}!</strong> We hope you love your jewelry.
             </p>
             <p className={styles.returnPolicy}>
-              <RotateCcw size={10} /> 7-day returns
+              <RotateCcw size={10} /> 7-day Exchange
             </p>
           </div>
 
@@ -975,8 +1078,8 @@ export default function OrderDetailPage() {
         </div>
       </div>
       {/* Hidden Slip 2 */}
-      <div id="order-slip-2" ref={targetRef2} style={{ position: 'absolute', top: '-9999px' }}>
-        <div className={styles.orderSlip2}>
+      <div id="order-slip-2" className={styles.pdfExportContainer}>
+        <div className={styles.orderSlip2} ref={targetRef2}>
           <div className={styles.slip2TopBar}>
             <div className={styles.slip2OrderNo}>ORDER NO: {order.orderNumber}</div>
             <div className={`${styles.slip2PaymentMode} ${order.orderType === 'COD' ? styles.cod : styles.prepaid}`}>
@@ -996,7 +1099,7 @@ export default function OrderDetailPage() {
           <div className={styles.slip2Details}>
             <div className={styles.slip2DetailRow}>
               <div className={styles.slip2Label}>Amount:</div>
-              <div className={styles.slip2Label}>Rs. {order.finalAmount}</div>
+              <div className={styles.slip2Label}>Rs. {orderFinalAmount}</div>
             </div>
             <div className={styles.slip2DetailRow}>
               <div className={styles.slip2Label}>Address:</div>
