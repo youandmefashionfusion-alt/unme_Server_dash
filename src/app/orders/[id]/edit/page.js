@@ -57,6 +57,15 @@ export default function EditOrderPage() {
         updateOrderSetting('orderType', data.orderType || 'COD');
         updateOrderSetting('discount', Number(data.discount) || 0);
         updateOrderSetting('shippingCost', Number(data.shippingCost) || 0);
+        const derivedCodCharge =
+          data.orderType === 'COD'
+            ? Math.max(
+                Number(data.finalAmount || 0) -
+                  (Number(data.totalPrice || 0) + Number(data.shippingCost || 0) - Number(data.discount || 0)),
+                0
+              )
+            : 0;
+        updateOrderSetting('codCharge', Number(data?.codCharge ?? derivedCodCharge) || 0);
       } else {
         toast.error('Order not found');
         router.push('/orders');
@@ -85,6 +94,7 @@ export default function EditOrderPage() {
           orderItems: formData.orderItems,
           totalPrice: totals.subtotal,
           shippingCost: formData.shippingCost,
+          codCharge: formData.orderType === 'COD' ? formData.codCharge : 0,
           orderType: formData.orderType,
           discount: formData.discount,
           finalAmount: totals.total,
@@ -340,6 +350,17 @@ export default function EditOrderPage() {
                   placeholder="Discount amount"
                 />
               </div>
+              <div className={styles.formGroup}>
+                <label>COD Charges (Rs)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={formData.codCharge}
+                  onChange={(e) => updateOrderSetting('codCharge', parseFloat(e.target.value) || 0)}
+                  placeholder="COD charges"
+                  disabled={formData.orderType !== 'COD'}
+                />
+              </div>
             </div>
 
             <div className={styles.summary}>
@@ -355,6 +376,12 @@ export default function EditOrderPage() {
                 <span>Discount</span>
                 <span>-₹{formData.discount}</span>
               </div>
+              {formData.orderType === 'COD' && (
+                <div className={styles.summaryRow}>
+                  <span>COD Charges</span>
+                  <span>+Rs {formData.codCharge}</span>
+                </div>
+              )}
               <div className={styles.summaryTotal}>
                 <span>Total</span>
                 <span>₹{totals.total}</span>

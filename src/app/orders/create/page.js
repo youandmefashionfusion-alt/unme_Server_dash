@@ -21,6 +21,7 @@ export default function CreateOrderPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          codCharge: formData.orderType === 'COD' ? Number(formData.codCharge || 0) : 0,
           totalPrice: totals.subtotal,
           finalAmount: totals.total,
         }),
@@ -214,6 +215,16 @@ export default function CreateOrderPage() {
                   min="0"
                 />
               </div>
+              <div className={styles.field}>
+                <label>COD Charges (Rs)</label>
+                <input
+                  type="number"
+                  value={formData.codCharge}
+                  onChange={(e) => updateOrderSetting('codCharge', Number(e.target.value) || 0)}
+                  min="0"
+                  disabled={formData.orderType !== 'COD'}
+                />
+              </div>
             </div>
 
             <div className={styles.summary}>
@@ -229,6 +240,12 @@ export default function CreateOrderPage() {
                 <span>Discount</span>
                 <span>-₹{formData.discount}</span>
               </div>
+              {formData.orderType === 'COD' && (
+                <div className={styles.summaryRow}>
+                  <span>COD Charges</span>
+                  <span>+Rs {formData.codCharge}</span>
+                </div>
+              )}
               <div className={styles.summaryTotal}>
                 <span>Total</span>
                 <span>₹{totals.total}</span>

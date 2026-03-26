@@ -47,6 +47,21 @@ var orderSchema = new mongoose.Schema(
       link: {
         type: String,
       },
+      trackingId: {
+        type: String,
+      },
+      trackingLink: {
+        type: String,
+      },
+      pickupDatetime: {
+        type: String,
+      },
+      pickupId: {
+        type: String,
+      },
+      pickupRequestedAt: {
+        type: Date,
+      },
     },
     paymentInfo: {
       razorpayOrderId: {
@@ -83,6 +98,10 @@ var orderSchema = new mongoose.Schema(
     shippingCost: {
       type: Number,
       required: true
+    },
+    codCharge: {
+      type: Number,
+      default: 0,
     },
     orderType: {
       type: String,

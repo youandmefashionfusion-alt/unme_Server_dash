@@ -17,6 +17,7 @@ export const useOrderForm = (initialOrder = null) => {
     orderType: initialOrder?.orderType || 'COD',
     discount: initialOrder?.discount || 0,
     shippingCost: initialOrder?.shippingCost || 0,
+    codCharge: initialOrder?.codCharge || 0,
   });
 
   const [search, setSearch] = useState({ query: '', results: [], show: false });
@@ -77,9 +78,13 @@ export const useOrderForm = (initialOrder = null) => {
     const subtotal = formData.orderItems.reduce(
       (sum, item) => sum + (item.product.price * item.quantity), 0
     );
-    const total = subtotal - formData.discount + formData.shippingCost;
+    const safeDiscount = Math.max(Number(formData.discount || 0), 0);
+    const safeShipping = Math.max(Number(formData.shippingCost || 0), 0);
+    const appliedCodCharge =
+      formData.orderType === 'COD' ? Math.max(Number(formData.codCharge || 0), 0) : 0;
+    const total = subtotal - safeDiscount + safeShipping + appliedCodCharge;
     return { subtotal, total };
-  }, [formData.orderItems, formData.discount, formData.shippingCost]);
+  }, [formData.orderItems, formData.discount, formData.shippingCost, formData.codCharge, formData.orderType]);
 
   const validate = useCallback(() => {
     if (!formData.shippingInfo.firstname?.trim()) {

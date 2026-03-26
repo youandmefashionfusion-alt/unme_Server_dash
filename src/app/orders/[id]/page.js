@@ -251,36 +251,78 @@ export default function OrderDetailPage() {
     }
   };
 
-  const handleDelhiveryTrackingUpdate = async ({ partner, waybill, link }) => {
-    const res = await fetch('/api/order/send-tracking', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        orderId,
-        partner,
-        trackingId: waybill,
-        trackingLink: `https://www.delhivery.com/track/package/${waybill}`,
-        link: `TrackingId: ${waybill}, Tracking Link: https://www.delhivery.com/track/package/${waybill}`,
-        name: order.shippingInfo.firstname,
-        ordernumber: order.orderNumber,
-        email: order.shippingInfo.email,
-        phone: order.shippingInfo.phone,
-      }),
-    });
-    if (res.ok) {
-      toast.success('Tracking saved & email sent to customer!');
+  const handleDelhiveryTrackingUpdate = async ({
+    partner = 'Delhivery',
+    waybill,
+    link,
+    pickupDatetime,
+    pickupId,
+    sendEmailUpdate = true,
+    updateOrderStatus = true,
+  }) => {
+    try {
+      const existingWaybill = order?.trackingInfo?.trackingId ||
+        order?.trackingInfo?.link?.split('TrackingId: ')[1]?.split(',')[0]?.trim();
+      const resolvedWaybill = waybill || existingWaybill || '';
+      const resolvedTrackingLink = resolvedWaybill
+        ? `https://www.delhivery.com/track/package/${resolvedWaybill}`
+        : order?.trackingInfo?.trackingLink || '';
+      const resolvedLink = link ||
+        (resolvedWaybill
+          ? `TrackingId: ${resolvedWaybill}, Tracking Link: ${resolvedTrackingLink}`
+          : order?.trackingInfo?.link || '');
+
+      const res = await fetch('/api/order/send-tracking', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId,
+          partner,
+          trackingId: resolvedWaybill,
+          trackingLink: resolvedTrackingLink,
+          link: resolvedLink,
+          pickupDatetime,
+          pickupId,
+          pickupRequestedAt: pickupDatetime ? new Date().toISOString() : undefined,
+          sendEmailUpdate,
+          updateOrderStatus,
+          name: order.shippingInfo.firstname,
+          ordernumber: order.orderNumber,
+          email: order.shippingInfo.email,
+          phone: order.shippingInfo.phone,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorPayload = await res.json().catch(() => ({}));
+        toast.error(errorPayload?.error || 'Unable to save tracking details');
+        return false;
+      }
+
+      const isPickupOnlyUpdate = Boolean(pickupDatetime || pickupId) && !sendEmailUpdate;
+      toast.success(
+        isPickupOnlyUpdate
+          ? 'Pickup details saved successfully!'
+          : 'Tracking saved & email sent to customer!'
+      );
       await fetch('/api/order/set-history', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: user?.firstname,
           orderId: order?._id,
-          message: `Tracking details Sended :- TrackingId: ${waybill}, Tracking Link: https://www.delhivery.com/track/package/${waybill}`,
+          message: isPickupOnlyUpdate
+            ? `Pickup scheduled for ${pickupDatetime}${pickupId ? ` (Pickup ID: ${pickupId})` : ''}`
+            : `Tracking details Sended :- TrackingId: ${resolvedWaybill}, Tracking Link: ${resolvedTrackingLink}`,
           time: new Date().toISOString(),
         }),
       });
 
-      fetchOrder(); // refresh order
+      await fetchOrder();
+      return true;
+    } catch (error) {
+      toast.error('Unable to save tracking details');
+      return false;
     }
   };
 
@@ -413,6 +455,8 @@ export default function OrderDetailPage() {
   const orderShippingCost = getSafeNumber(order?.shippingCost);
   const orderDiscount = Math.max(getSafeNumber(order?.discount), 0);
   const orderFinalAmount = getSafeNumber(order?.finalAmount);
+  const hasStoredCodCharge = order?.codCharge !== undefined && order?.codCharge !== null;
+  const storedCodCharge = Math.max(getSafeNumber(order?.codCharge), 0);
 
   const derivedCodCharge =
     order?.orderType === 'COD'
@@ -421,7 +465,7 @@ export default function OrderDetailPage() {
           0
         )
       : 0;
-  const orderCodCharge = Math.round(derivedCodCharge);
+  const orderCodCharge = Math.round(hasStoredCodCharge ? storedCodCharge : derivedCodCharge);
   const isFreeShipping = orderShippingCost === 0;
   const freeShippingNote = isFreeShipping
     ? orderSubtotal > FREE_SHIPPING_THRESHOLD

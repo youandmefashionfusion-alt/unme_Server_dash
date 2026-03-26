@@ -53,12 +53,35 @@ export default function DelhiveryPanel({ order, onTrackingUpdate }) {
     create: false, pickup: false, track: false, cancel: false, download: false,
   });
 
+  const normalizeDatetimeLocal = (value) => {
+    if (!value) return '';
+    const normalized = String(value).trim();
+
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(normalized)) {
+      return normalized;
+    }
+
+    const parsed = new Date(normalized);
+    if (Number.isNaN(parsed.getTime())) return '';
+
+    const tzOffset = parsed.getTimezoneOffset() * 60000;
+    return new Date(parsed.getTime() - tzOffset).toISOString().slice(0, 16);
+  };
+
   // Load waybill from order's existing tracking info on mount
   useEffect(() => {
-    if (order?.trackingInfo?.partner === 'Delhivery') {
+    if (!order?.trackingInfo) return;
+
+    if (order.trackingInfo.partner === 'Delhivery') {
+      const fromTrackingId = order.trackingInfo.trackingId;
       const raw = order.trackingInfo.link || '';
-      const wb = raw.split('TrackingId: ')[1]?.split(',')[0]?.trim();
+      const fromLink = raw.split('TrackingId: ')[1]?.split(',')[0]?.trim();
+      const wb = fromTrackingId || fromLink || '';
       if (wb) setWaybill(wb);
+    }
+
+    if (order.trackingInfo.pickupDatetime) {
+      setPickupDatetime(normalizeDatetimeLocal(order.trackingInfo.pickupDatetime));
     }
   }, [order]);
 
@@ -68,29 +91,53 @@ export default function DelhiveryPanel({ order, onTrackingUpdate }) {
   // ── actions ─────────────────────────────────────────────────────────────────
   const handleCreate = async () => {
     setLoad('create', true);
-    const enrichedOrder = {
-      ...order,
-      _dimensions: dimensions, // hook will read this
-    };
-    const result = await createShipment({ ...enrichedOrder, _dimensions: dimensions });
-    if (result.success) {
-      setWaybill(result.waybill);
-      // Auto-save to order tracking
-      onTrackingUpdate?.({
-        partner: 'Delhivery',
-        waybill: result.waybill,
-        link: `TrackingId: ${result.waybill}, Tracking Link: https://www.delhivery.com/track/package/${result.waybill}`,
-      });
+    try {
+      const enrichedOrder = {
+        ...order,
+        _dimensions: dimensions, // hook will read this
+      };
+      const result = await createShipment({ ...enrichedOrder, _dimensions: dimensions });
+      if (result.success) {
+        setWaybill(result.waybill);
+        if (onTrackingUpdate) {
+          const persisted = await onTrackingUpdate({
+            partner: 'Delhivery',
+            waybill: result.waybill,
+            link: `TrackingId: ${result.waybill}, Tracking Link: https://www.delhivery.com/track/package/${result.waybill}`,
+          });
+          if (persisted === false) {
+            toast.error('Shipment created, but tracking details could not be saved.');
+          }
+        }
+      }
+    } finally {
+      setLoad('create', false);
     }
-    setLoad('create', false);
   };
 
   const handlePickup = async () => {
-    if (!waybill) return toast.error('No waybill — create shipment first');
+    if (!waybill) return toast.error('No waybill - create shipment first');
     if (!pickupDatetime) return toast.error('Select a pickup date & time');
     setLoad('pickup', true);
-    await requestPickup(waybill, pickupDatetime);
-    setLoad('pickup', false);
+    try {
+      const result = await requestPickup(waybill, pickupDatetime);
+      if (result.success && onTrackingUpdate) {
+        const persisted = await onTrackingUpdate({
+          partner: 'Delhivery',
+          waybill,
+          pickupDatetime,
+          pickupId: result.pickupId,
+          sendEmailUpdate: false,
+          updateOrderStatus: false,
+        });
+
+        if (persisted === false) {
+          toast.error('Pickup created, but pickup details could not be saved.');
+        }
+      }
+    } finally {
+      setLoad('pickup', false);
+    }
   };
 
   const handleTrack = async () => {
@@ -294,3 +341,4 @@ export default function DelhiveryPanel({ order, onTrackingUpdate }) {
     </div>
   );
 }
+

@@ -178,10 +178,31 @@ export async function POST(req,res){
   const body = await req.text();
   const parsedBody = JSON.parse(body);
 
-  const { shippingInfo, orderItems, totalPrice, finalAmount, shippingCost, orderType, discount, paymentInfo, isPartial } = parsedBody;
+  const {
+    shippingInfo,
+    orderItems,
+    totalPrice,
+    finalAmount,
+    shippingCost,
+    codCharge = 0,
+    orderType,
+    discount,
+    paymentInfo,
+    isPartial,
+    tag,
+  } = parsedBody;
   
   try {
     await connectDb()
+
+    const normalizedTotalPrice = Number(totalPrice) || 0;
+    const normalizedShippingCost = Number(shippingCost) || 0;
+    const normalizedDiscount = Number(discount) || 0;
+    const normalizedCodCharge =
+      orderType === 'COD' ? Math.max(Number(codCharge) || 0, 0) : 0;
+    const resolvedFinalAmount = Number.isFinite(Number(finalAmount))
+      ? Number(finalAmount)
+      : normalizedTotalPrice - normalizedDiscount + normalizedShippingCost + normalizedCodCharge;
 
     // await validateOrderPricesAndAmounts(orderItems, totalPrice, finalAmount, discount, shippingCost);
 
@@ -204,11 +225,12 @@ export async function POST(req,res){
     const order = await OrderModel.create({
       shippingInfo,
       orderItems,
-      totalPrice,
-      finalAmount,
-      shippingCost,
+      totalPrice: normalizedTotalPrice,
+      finalAmount: resolvedFinalAmount,
+      shippingCost: normalizedShippingCost,
+      codCharge: normalizedCodCharge,
       orderType,
-      discount,
+      discount: normalizedDiscount,
       paymentInfo,
       tag,
       isPartial
