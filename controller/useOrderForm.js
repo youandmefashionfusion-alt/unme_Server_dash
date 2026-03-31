@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import toast from 'react-hot-toast';
+import { CHECKOUT_STANDARD_COD_CHARGE } from '../src/lib/orderPricing';
 
 export const useOrderForm = (initialOrder = null) => {
   const [formData, setFormData] = useState({
@@ -17,7 +18,7 @@ export const useOrderForm = (initialOrder = null) => {
     orderType: initialOrder?.orderType || 'COD',
     discount: initialOrder?.discount || 0,
     shippingCost: initialOrder?.shippingCost || 0,
-    codCharge: initialOrder?.codCharge || 0,
+    codCharge: initialOrder?.codCharge || CHECKOUT_STANDARD_COD_CHARGE,
   });
 
   const [search, setSearch] = useState({ query: '', results: [], show: false });
@@ -30,7 +31,19 @@ export const useOrderForm = (initialOrder = null) => {
   }, []);
 
   const updateOrderSetting = useCallback((key, value) => {
-    setFormData(prev => ({ ...prev, [key]: value }));
+    setFormData(prev => {
+      if (key === 'orderType') {
+        const nextOrderType = value;
+        if (nextOrderType === 'COD' && Number(prev.codCharge || 0) <= 0) {
+          return { ...prev, orderType: nextOrderType, codCharge: CHECKOUT_STANDARD_COD_CHARGE };
+        }
+        if (nextOrderType !== 'COD') {
+          return { ...prev, orderType: nextOrderType, codCharge: 0 };
+        }
+      }
+
+      return { ...prev, [key]: value };
+    });
   }, []);
 
   const addProduct = useCallback((product) => {

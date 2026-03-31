@@ -9,7 +9,9 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
-  const status = searchParams.get("status");
+  const statusParam = searchParams.get("status");
+  const status =
+    statusParam === "active" || statusParam === "draft" ? statusParam : null;
 
   try {
     await connectDb();
@@ -80,6 +82,7 @@ export async function GET(req) {
 
       return {
         ...item.toObject(),
+        status: item.status || "draft",
         productCount: byIdCount + byHandleCount + byLegacyNameCount,
       };
     });

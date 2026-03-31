@@ -182,13 +182,23 @@ const CollectionDetail = () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData)
             })
+            const data = await response.json().catch(() => null)
 
             if (response.ok) {
+                if (data && typeof data === 'object') {
+                    setFormData(prev => ({
+                        ...prev,
+                        status: data.status || prev.status,
+                        title: data.title || prev.title,
+                        handle: data.handle || prev.handle,
+                    }))
+                }
                 await createHistory(isNewCollection ? 'Created a Collection' : 'Updated a Collection')
                 toast.success(`Collection ${isNewCollection ? 'created' : 'updated'} successfully!`)
                 if (isNewCollection) router.push('/collections')
+                if (!isNewCollection) fetchCollection()
             } else {
-                toast.error(`Unable to ${isNewCollection ? 'create' : 'update'} collection`)
+                toast.error(data?.message || `Unable to ${isNewCollection ? 'create' : 'update'} collection`)
             }
         } catch (error) {
             console.error('Error saving collection:', error)

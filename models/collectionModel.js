@@ -37,6 +37,8 @@ var collectionSchema = new mongoose.Schema(
     },
     status:{
       type:String,
+      enum: ["active", "draft"],
+      default: "draft",
     },
   },
   {

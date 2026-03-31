@@ -9,17 +9,21 @@ export async function GET(request){
     try{
         await connectDb()
         if(id===""){
-        return Response.json({status:400,message:"Not Enough Details"})   
+        return Response.json({success:false,status:400,message:"Not Enough Details"}, { status: 400 })   
         }
         const collection = await CollectionModel.findById(id)
 
         if(collection){
-            return Response.json(collection)
+            return Response.json(collection, { status: 200 })
         }
 
+        return Response.json(
+          { success: false, status: 404, message: "Collection not found" },
+          { status: 404 }
+        );
 
     }
     catch(error){
-        return Response.json({status:500,message:error})
+        return Response.json({success:false,status:500,message:error},{ status: 500 })
     }
 }

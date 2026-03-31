@@ -7,6 +7,7 @@ import { useOrderForm } from '../../../../../controller/useOrderForm';
 import ProductSearch from '../../../../../components/ProductSearch';
 import styles from '../../orders.module.css';
 import toast from 'react-hot-toast';
+import { resolveOrderShippingCost, resolveOrderCodCharge } from '../../../../lib/orderPricing';
 
 export default function EditOrderPage() {
   const params = useParams();
@@ -21,30 +22,34 @@ export default function EditOrderPage() {
   const { formData, totals, setSearch, updateShippingInfo, updateOrderSetting, addProduct, updateQuantity, removeProduct, validate } = useOrderForm();
 
   useEffect(() => {
+    if (!orderId) return;
     fetchOrder();
   }, [orderId]);
 
   const fetchOrder = async () => {
+    if (!orderId) return;
     try {
       setLoading(true);
       const res = await fetch(`/api/order/single-order?id=${orderId}`);
       const data = await res.json();
+      const orderPayload = data?.order && typeof data.order === 'object' ? data.order : data;
+      const hasValidOrder = Boolean(orderPayload && typeof orderPayload === 'object' && orderPayload._id);
 
-      if (res.ok && data) {
-        setOriginalOrder(data);
+      if (res.ok && hasValidOrder) {
+        setOriginalOrder(orderPayload);
         // Initialize form with existing order data
-        updateShippingInfo('firstname', data.shippingInfo.firstname || '');
-        updateShippingInfo('lastname', data.shippingInfo.lastname || '');
-        updateShippingInfo('email', data.shippingInfo.email || '');
-        updateShippingInfo('phone', String(data.shippingInfo.phone || ''))
-        updateShippingInfo('address', data.shippingInfo.address || '');
-        updateShippingInfo('city', data.shippingInfo.city || '');
-        updateShippingInfo('state', data.shippingInfo.state || '');
-        updateShippingInfo('pincode', String(data.shippingInfo.pincode || ''))
+        updateShippingInfo('firstname', orderPayload?.shippingInfo?.firstname || '');
+        updateShippingInfo('lastname', orderPayload?.shippingInfo?.lastname || '');
+        updateShippingInfo('email', orderPayload?.shippingInfo?.email || '');
+        updateShippingInfo('phone', String(orderPayload?.shippingInfo?.phone || ''))
+        updateShippingInfo('address', orderPayload?.shippingInfo?.address || '');
+        updateShippingInfo('city', orderPayload?.shippingInfo?.city || '');
+        updateShippingInfo('state', orderPayload?.shippingInfo?.state || '');
+        updateShippingInfo('pincode', String(orderPayload?.shippingInfo?.pincode || ''))
 
         // Add products one by one
-        if (data.orderItems?.length > 0) {
-          data?.orderItems?.forEach(item => {
+        if (orderPayload?.orderItems?.length > 0) {
+          orderPayload?.orderItems?.forEach(item => {
             addProduct(item.product);
             // Update quantity after product is added
             setTimeout(() => {
@@ -54,18 +59,12 @@ export default function EditOrderPage() {
           });
         }
 
-        updateOrderSetting('orderType', data.orderType || 'COD');
-        updateOrderSetting('discount', Number(data.discount) || 0);
-        updateOrderSetting('shippingCost', Number(data.shippingCost) || 0);
-        const derivedCodCharge =
-          data.orderType === 'COD'
-            ? Math.max(
-                Number(data.finalAmount || 0) -
-                  (Number(data.totalPrice || 0) + Number(data.shippingCost || 0) - Number(data.discount || 0)),
-                0
-              )
-            : 0;
-        updateOrderSetting('codCharge', Number(data?.codCharge ?? derivedCodCharge) || 0);
+        updateOrderSetting('orderType', orderPayload.orderType || 'COD');
+        updateOrderSetting('discount', Number(orderPayload.discount) || 0);
+        const normalizedShippingCost = resolveOrderShippingCost(orderPayload);
+        const normalizedCodCharge = resolveOrderCodCharge(orderPayload, normalizedShippingCost);
+        updateOrderSetting('shippingCost', normalizedShippingCost);
+        updateOrderSetting('codCharge', normalizedCodCharge);
       } else {
         toast.error('Order not found');
         router.push('/orders');

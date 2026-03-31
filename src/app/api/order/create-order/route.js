@@ -3,6 +3,7 @@ import ProductModel from "../../../../../models/productModel";
 import OrderModel from "../../../../../models/orderModel";
 import UserModel from "../../../../../models/userModel";
 import connectDb from "../../../../../config/connectDb";
+import { CHECKOUT_STANDARD_COD_CHARGE } from "../../../../lib/orderPricing";
 
 export const config = {
   maxDuration: 10,
@@ -198,8 +199,20 @@ export async function POST(req,res){
     const normalizedTotalPrice = Number(totalPrice) || 0;
     const normalizedShippingCost = Number(shippingCost) || 0;
     const normalizedDiscount = Number(discount) || 0;
+    const requestedCodCharge = Math.max(Number(codCharge) || 0, 0);
+    const inferredCodCharge = Math.max(
+      Number(finalAmount || 0) -
+        (normalizedTotalPrice + normalizedShippingCost - normalizedDiscount),
+      0
+    );
     const normalizedCodCharge =
-      orderType === 'COD' ? Math.max(Number(codCharge) || 0, 0) : 0;
+      orderType === 'COD'
+        ? requestedCodCharge > 0
+          ? requestedCodCharge
+          : inferredCodCharge > 0
+            ? inferredCodCharge
+            : CHECKOUT_STANDARD_COD_CHARGE
+        : 0;
     const resolvedFinalAmount = Number.isFinite(Number(finalAmount))
       ? Number(finalAmount)
       : normalizedTotalPrice - normalizedDiscount + normalizedShippingCost + normalizedCodCharge;
