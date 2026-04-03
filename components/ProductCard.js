@@ -1,8 +1,8 @@
 import React from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
-import { Trash2, Copy, Eye } from 'lucide-react';
+import { Trash2, Copy } from 'lucide-react';
 import styles from '../src/app/products/Products.module.css';
+import defaultProductImage from '../images/default-product.png';
 
 const ProductCard = ({ 
   product, 
@@ -26,7 +26,11 @@ const ProductCard = ({
   };
 
   const stockStatus = getStockStatus(product.quantity);
-  const primaryImage = product.images?.[0]?.url || '/placeholder.jpg';
+  const hasPrimaryImage = Boolean(product.images?.[0]?.url);
+  const primaryImage = hasPrimaryImage ? product.images[0].url : defaultProductImage.src;
+  const imageClassName = hasPrimaryImage
+    ? styles.productImage
+    : `${styles.productImage} ${styles.productImageFallback}`;
 
   return (
     <div className={styles.productCard}>
@@ -37,7 +41,7 @@ const ProductCard = ({
             <img
               src={modifyImageUrl(primaryImage)}
               alt={product.title}
-              className={styles.productImage}
+              className={imageClassName}
               loading="lazy"
             />
           </div>

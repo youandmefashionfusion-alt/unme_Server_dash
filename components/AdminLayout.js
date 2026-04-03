@@ -1,4 +1,4 @@
-// app/admin/layout.js
+﻿// app/admin/layout.js
 'use client';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -27,7 +27,7 @@ export default function AdminLayout({ children }) {
     return (
       <div className="loadingContainer">
         <div className="loader">
-          <div className="loaderSpinner"></div>
+          <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Loading" style={{ width: 200, height: 200, display: "inline-block" }} />
           <p>Loading...</p>
         </div>
       </div>
@@ -49,3 +49,6 @@ export default function AdminLayout({ children }) {
     </div>
   );
 }
+
+
+

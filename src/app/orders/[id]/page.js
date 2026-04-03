@@ -22,6 +22,7 @@ import {
   Send,
   DollarSign,
   Tag,
+  Trash2,
 } from "lucide-react";
 import { useOrders } from "../../../../controller/useOrders";
 import DelhiveryPanel from "../../../../components/DelhiveryPanel";
@@ -30,8 +31,10 @@ import toast from "react-hot-toast";
 import { usePDF } from "react-to-pdf";
 import {
   CHECKOUT_FREE_SHIPPING_THRESHOLD,
+  CHECKOUT_STANDARD_GIFT_WRAP_CHARGE,
   resolveOrderShippingCost,
   resolveOrderCodCharge,
+  resolveOrderGiftWrapTotal,
 } from "../../../lib/orderPricing";
 
 export default function OrderDetailPage() {
@@ -40,6 +43,11 @@ export default function OrderDetailPage() {
   const orderId = params.id;
   const { user } = useSelector((state) => state.auth);
   const { updateOrderStatus } = useOrders();
+  const normalize = (value) => String(value || "").trim().toLowerCase();
+  const canDeleteOrders =
+    normalize(user?.mobile) === "9719250693" &&
+    normalize(user?.firstname) === "ujjawal" &&
+    normalize(user?.email) === "ujjawal@codexae.com";
 
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -402,6 +410,32 @@ export default function OrderDetailPage() {
     }
   };
 
+  const handleDeleteOrder = async () => {
+    if (!canDeleteOrders) {
+      toast.error("You are not authorized to delete orders");
+      return;
+    }
+    if (!window.confirm(`Delete order #${order?.orderNumber}? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `/api/order/delete-order?id=${orderId}&token=${user?.token}`,
+        { method: "DELETE" }
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || "Failed to delete order");
+      }
+
+      toast.success("Order deleted successfully");
+      router.push("/orders");
+    } catch (error) {
+      toast.error(error?.message || "Unable to delete order");
+    }
+  };
+
   const formatDate = (date) => {
     return new Date(date).toLocaleDateString("en-IN", {
       day: "numeric",
@@ -516,9 +550,20 @@ export default function OrderDetailPage() {
   const trackingInfo = order?.trackingInfo || {};
   const orderSubtotal = getSafeNumber(order?.totalPrice);
   const orderShippingCost = resolveOrderShippingCost(order);
+  const orderGiftWrapTotal = resolveOrderGiftWrapTotal(order);
   const orderDiscount = Math.max(getSafeNumber(order?.discount), 0);
-  const orderFinalAmount = getSafeNumber(order?.finalAmount);
   const orderCodCharge = resolveOrderCodCharge(order, orderShippingCost);
+  const derivedFinalAmount =
+    orderSubtotal +
+    orderGiftWrapTotal +
+    orderShippingCost +
+    orderCodCharge -
+    orderDiscount;
+  const orderFinalAmount =
+    Number.isFinite(Number(order?.finalAmount)) &&
+    Number(order?.finalAmount) > 0
+      ? getSafeNumber(order?.finalAmount)
+      : derivedFinalAmount;
   const isFreeShipping = orderShippingCost === 0;
   const freeShippingNote = isFreeShipping
     ? orderSubtotal > CHECKOUT_FREE_SHIPPING_THRESHOLD
@@ -529,7 +574,7 @@ export default function OrderDetailPage() {
   if (loading) {
     return (
       <div className={styles.loading}>
-        <div className={styles.spinner}></div>
+        <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Loading" style={{ width: 200, height: 200, display: "inline-block" }} />
         <p>Loading order...</p>
       </div>
     );
@@ -600,6 +645,15 @@ export default function OrderDetailPage() {
             <Edit size={16} />
             Edit Order
           </Link>
+          {canDeleteOrders && (
+            <button
+              onClick={handleDeleteOrder}
+              className={styles.dangerBtn}
+            >
+              <Trash2 size={16} />
+              Delete Order
+            </button>
+          )}
         </div>
       </div>
 
@@ -705,9 +759,27 @@ export default function OrderDetailPage() {
                             Qty: {item.quantity}
                           </span>
                         </div>
+                        {(item?.giftWrap || item?.isGift) && (
+                          <div className={styles.itemGiftMeta}>
+                              {item?.giftWrap && (
+                                <span className={styles.itemGiftBadge}>
+                                Gift wrap (+₹{item?.giftWrapCharge || CHECKOUT_STANDARD_GIFT_WRAP_CHARGE} order-level)
+                                </span>
+                              )}
+                            {item?.isGift && item?.giftMessage && (
+                              <div className={styles.itemGiftMessageCard}>
+                                <p className={styles.itemGiftHeading}>Custom Message</p>
+                                <p className={styles.itemGiftMessage}>{item.giftMessage}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <div className={styles.detailItemTotal}>
-                        ₹{(item.product.price * item.quantity).toFixed(0)}
+                        ₹{(
+                          (Number(item?.product?.price) || Number(item?.price) || 0) *
+                          (Number(item?.quantity) || 0)
+                        ).toFixed(0)}
                       </div>
                     </div>
                   </Link>
@@ -732,6 +804,12 @@ export default function OrderDetailPage() {
                 </div>
                 {isFreeShipping && (
                   <p className={styles.summaryNote}>{freeShippingNote}</p>
+                )}
+                {orderGiftWrapTotal > 0 && (
+                  <div className={styles.summaryRow}>
+                    <span>Gift Wrap (Order Level)</span>
+                    <span>{formatCurrency(orderGiftWrapTotal)}</span>
+                  </div>
                 )}
                 {isCodOrder && (
                   <div className={styles.summaryRow}>
@@ -1152,6 +1230,21 @@ export default function OrderDetailPage() {
                   <p className={styles.packingProductSku}>
                     SKU: {item.product?.sku}
                   </p>
+                  {(item?.giftWrap || item?.isGift) && (
+                    <div className={styles.itemGiftMeta}>
+                      {item?.giftWrap && (
+                        <span className={styles.itemGiftBadge}>
+                          Gift wrap (+₹{item?.giftWrapCharge || CHECKOUT_STANDARD_GIFT_WRAP_CHARGE} order-level)
+                        </span>
+                      )}
+                      {item?.isGift && item?.giftMessage && (
+                        <div className={styles.itemGiftMessageCard}>
+                          <p className={styles.itemGiftHeading}>Custom Message</p>
+                          <p className={styles.itemGiftMessage}>{item.giftMessage}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className={styles.packingCellRight}>
                   ₹{item.product?.price}
@@ -1163,7 +1256,10 @@ export default function OrderDetailPage() {
                 </div>
                 <div className={styles.packingCellRight}>
                   <span className={styles.packingTotalPrice}>
-                    ₹{(item.product.price * item.quantity).toFixed(0)}
+                    ₹{(
+                      (Number(item?.product?.price) || Number(item?.price) || 0) *
+                      (Number(item?.quantity) || 0)
+                    ).toFixed(0)}
                   </span>
                 </div>
               </div>
@@ -1182,6 +1278,12 @@ export default function OrderDetailPage() {
                   {isFreeShipping ? "FREE" : formatCurrency(orderShippingCost)}
                 </span>
               </div>
+              {orderGiftWrapTotal > 0 && (
+                <div className={styles.packingSummaryRow}>
+                  <span>Gift Wrap (Order Level)</span>
+                  <span>{formatCurrency(orderGiftWrapTotal)}</span>
+                </div>
+              )}
               {isCodOrder && (
                 <div className={styles.packingSummaryRow}>
                   <span>COD Charges</span>

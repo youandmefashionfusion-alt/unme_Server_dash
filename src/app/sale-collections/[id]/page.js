@@ -180,7 +180,7 @@ const CollectionDetail = () => {
     if (loading) {
         return (
             <div className={styles.loading}>
-                <div className={styles.spinner}></div>
+                <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Loading" style={{ width: 200, height: 200, display: "inline-block" }} />
                 <p>Loading collection...</p>
             </div>
         )
@@ -343,3 +343,6 @@ const CollectionDetail = () => {
 }
 
 export default CollectionDetail
+
+
+

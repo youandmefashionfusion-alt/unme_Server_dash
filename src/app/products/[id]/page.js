@@ -56,10 +56,17 @@ const ProductDetailPage = () => {
     handleInputChange('saleCollections', newValue);
   };
 
+  const handleDeleteProduct = async () => {
+    const deleted = await deleteProduct();
+    if (deleted) {
+      router.replace('/products');
+    }
+  };
+
   if (!mounted) {
     return (
       <div className={styles.loading}>
-        <div className={styles.spinner}></div>
+        <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Loading" style={{ width: 200, height: 200, display: "inline-block" }} />
         <p>Loading...</p>
       </div>
     );
@@ -68,7 +75,7 @@ const ProductDetailPage = () => {
   if (loading && !isNew) {
     return (
       <div className={styles.loading}>
-        <div className={styles.spinner}></div>
+        <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Loading" style={{ width: 200, height: 200, display: "inline-block" }} />
         <p>Loading product...</p>
       </div>
     );
@@ -126,7 +133,7 @@ const ProductDetailPage = () => {
                 Duplicate
               </button>
               <button
-                onClick={deleteProduct}
+                onClick={handleDeleteProduct}
                 className={styles.dangerBtn}
                 disabled={saving}
               >
@@ -512,3 +519,6 @@ const ProductDetailPage = () => {
 };
 
 export default ProductDetailPage;
+
+
+

@@ -268,7 +268,7 @@ const BlogDetailPage = () => {
   if (loading) {
     return (
       <div className={styles.loading}>
-        <div className={styles.spinner}></div>
+        <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Loading" style={{ width: 200, height: 200, display: "inline-block" }} />
         <p>Loading blog...</p>
       </div>
     )
@@ -567,3 +567,6 @@ const BlogDetailPage = () => {
 
 
 export default BlogDetailPage
+
+
+

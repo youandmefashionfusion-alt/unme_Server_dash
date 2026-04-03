@@ -1,7 +1,10 @@
 import connectDb from "../../../../../config/connectDb";
 import authMiddleware from "../../../../../controller/authController";
 import OrderModel from "../../../../../models/orderModel";
-import { resolveOrderShippingCost } from "../../../../lib/orderPricing";
+import {
+  resolveOrderShippingCost,
+  resolveOrderGiftWrapTotal,
+} from "../../../../lib/orderPricing";
 
 const toFiniteNumber = (value) => {
   const parsed = Number(value);
@@ -25,10 +28,12 @@ export async function PUT(request){
       const orderObject = existingOrder.toObject();
       const totalPrice = Math.max(toFiniteNumber(orderObject.totalPrice), 0);
       const discount = Math.max(toFiniteNumber(orderObject.discount), 0);
+      const giftWrapTotal = Math.max(resolveOrderGiftWrapTotal(orderObject), 0);
       const shippingCost = resolveOrderShippingCost(orderObject);
-      const finalAmount = totalPrice + shippingCost - discount;
+      const finalAmount = totalPrice + giftWrapTotal + shippingCost - discount;
 
       existingOrder.orderType = 'Prepaid';
+      existingOrder.giftWrapTotal = giftWrapTotal;
       existingOrder.shippingCost = shippingCost;
       existingOrder.codCharge = 0;
       existingOrder.finalAmount = finalAmount;

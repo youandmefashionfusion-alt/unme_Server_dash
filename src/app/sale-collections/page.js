@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import React, { useEffect, useState } from 'react'
 import { useSelector } from 'react-redux'
 import styles from './Collections.module.css'
@@ -91,7 +91,7 @@ const CollectionsPage = () => {
     if (loading) {
         return (
             <div className={styles.loading}>
-                <div className={styles.spinner}></div>
+                <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Loading" style={{ width: 200, height: 200, display: "inline-block" }} />
                 <p>Loading collections...</p>
             </div>
         )
@@ -200,3 +200,6 @@ const CollectionsPage = () => {
 }
 
 export default CollectionsPage
+
+
+

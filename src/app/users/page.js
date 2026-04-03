@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import styles from './users.module.css';
@@ -309,7 +309,7 @@ const UsersPage = () => {
             <div className={styles.tableContainer}>
                 {loading ? (
                     <div className={styles.loadingState}>
-                        <div className={styles.spinner}></div>
+                        <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Loading" style={{ width: 200, height: 200, display: "inline-block" }} />
                         <p>Loading users...</p>
                     </div>
                 ) : filteredUsers.length > 0 ? (
@@ -478,3 +478,7 @@ const UsersPage = () => {
 
 
 export default UsersPage;
+
+
+
+

@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 import React, { useEffect, useState, useCallback } from "react";
 import styles from "./banners.module.css";
 import { X, Save, Plus, Trash2, Eye, Upload, Monitor, Smartphone, Globe } from "lucide-react";
@@ -240,7 +240,7 @@ const Banners = () => {
   if (loading) {
     return (
       <div className={styles.loadingContainer}>
-        <div className={styles.loadingSpinner}></div>
+        <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Loading banners" style={{ width: 200, height: 200, display: "inline-block" }} />
         <p>Loading banners...</p>
       </div>
     );
@@ -271,7 +271,7 @@ const Banners = () => {
             disabled={saving}
           >
             {saving ? (
-              <div className={styles.spinner}></div>
+              <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Saving" style={{ width: 40, height: 40, display: "inline-block" }} />
             ) : (
               <Save size={18} />
             )}
@@ -342,10 +342,10 @@ const BannerCard = React.memo(({
 }) => {
   const getRecommendedSize = () => {
     switch (activeTab) {
-      case 'desktop': return '1200×400px';
-      case 'mobile': return '800×400px';
-      case 'budget': return '1200×400px';
-      default: return '1000×400px';
+      case 'desktop': return '1200x400px';
+      case 'mobile': return '800x400px';
+      case 'budget': return '1200x400px';
+      default: return '1000x400px';
     }
   };
 
@@ -456,3 +456,6 @@ const BannerCard = React.memo(({
 BannerCard.displayName = 'BannerCard';
 
 export default Banners;
+
+
+

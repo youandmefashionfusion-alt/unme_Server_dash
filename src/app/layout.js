@@ -1,5 +1,6 @@
 "use client"
 import { Poppins } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
 import { Providers } from "../lib/Providers";
@@ -22,6 +23,10 @@ export default function RootLayout({ children }) {
         <link rel="shortcut icon" href={faviconHref || "/favicon.ico"} />
       </head>
       <body className={poppins.variable}>
+        <Script
+          src="https://unpkg.com/@lottiefiles/lottie-player@2.0.12/dist/lottie-player.js"
+          strategy="afterInteractive"
+        />
         <Toaster position="top-right" reverseOrder={false} />
         <Providers>
           <AdminLayout children={children}/>

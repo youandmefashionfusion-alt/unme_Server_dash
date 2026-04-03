@@ -1,6 +1,7 @@
 export const CHECKOUT_FREE_SHIPPING_THRESHOLD = 999;
 export const CHECKOUT_STANDARD_SHIPPING_CHARGE = 99;
 export const CHECKOUT_STANDARD_COD_CHARGE = 99;
+export const CHECKOUT_STANDARD_GIFT_WRAP_CHARGE = 69;
 
 const toFiniteNumber = (value) => {
   const parsed = Number(value);
@@ -32,8 +33,10 @@ export const resolveOrderShippingCost = (order = {}) => {
         ? Math.max(toFiniteNumber(currentOrder.codCharge), 0)
         : CHECKOUT_STANDARD_COD_CHARGE
       : 0;
+  const giftWrapTotal = resolveOrderGiftWrapTotal(currentOrder);
 
-  const derivedShipping = finalAmount + discount - subtotal - codChargeForDerivation;
+  const derivedShipping =
+    finalAmount + discount - subtotal - codChargeForDerivation - giftWrapTotal;
   if (Number.isFinite(derivedShipping) && derivedShipping >= 0) {
     return Math.round(derivedShipping);
   }
@@ -56,11 +59,13 @@ export const resolveOrderCodCharge = (order = {}, resolvedShippingCost) => {
   const shippingCost = Number.isFinite(Number(resolvedShippingCost))
     ? Math.max(toFiniteNumber(resolvedShippingCost), 0)
     : resolveOrderShippingCost(currentOrder);
+  const giftWrapTotal = resolveOrderGiftWrapTotal(currentOrder);
   const storedCodCharge = hasNumericValue(currentOrder.codCharge)
     ? Math.max(toFiniteNumber(currentOrder.codCharge), 0)
     : null;
 
-  const derivedCodCharge = finalAmount + discount - subtotal - shippingCost;
+  const derivedCodCharge =
+    finalAmount + discount - subtotal - shippingCost - giftWrapTotal;
   if (Number.isFinite(derivedCodCharge) && derivedCodCharge > 0) {
     return Math.round(derivedCodCharge);
   }
@@ -76,12 +81,29 @@ export const resolveOrderCodCharge = (order = {}, resolvedShippingCost) => {
   return CHECKOUT_STANDARD_COD_CHARGE;
 };
 
+export const resolveOrderGiftWrapTotal = (order = {}) => {
+  const currentOrder = order && typeof order === 'object' ? order : {};
+
+  if (hasNumericValue(currentOrder.giftWrapTotal)) {
+    const storedGiftWrapTotal = Math.max(toFiniteNumber(currentOrder.giftWrapTotal), 0);
+    if (storedGiftWrapTotal > 0) {
+      return storedGiftWrapTotal;
+    }
+  }
+
+  const orderItems = Array.isArray(currentOrder.orderItems) ? currentOrder.orderItems : [];
+  const hasGiftWrap = orderItems.some((item) => Boolean(item?.giftWrap));
+  return hasGiftWrap ? CHECKOUT_STANDARD_GIFT_WRAP_CHARGE : 0;
+};
+
 export const normalizeOrderPricing = (order = {}) => {
   const currentOrder = order && typeof order === 'object' ? order : {};
+  const giftWrapTotal = resolveOrderGiftWrapTotal(currentOrder);
   const shippingCost = resolveOrderShippingCost(currentOrder);
   const codCharge = resolveOrderCodCharge(currentOrder, shippingCost);
   return {
     ...currentOrder,
+    giftWrapTotal,
     shippingCost,
     codCharge,
   };

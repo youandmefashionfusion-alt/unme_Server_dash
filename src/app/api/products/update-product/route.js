@@ -1,6 +1,21 @@
 import connectDb from "../../../../../config/connectDb";
 import authMiddleware from "../../../../../controller/authController";
 import ProductModel from "../../../../../models/productModel";
+
+const formatMongoError = (error) => {
+  if (!error) return "Unable to update product";
+  if (typeof error?.message === "string" && error.message.trim()) {
+    if (error?.code === 11000 && error?.keyValue) {
+      const duplicateField = Object.keys(error.keyValue || {})[0];
+      if (duplicateField) {
+        return `Duplicate ${duplicateField}. Please use a unique value.`;
+      }
+    }
+    return error.message;
+  }
+  return "Unable to update product";
+};
+
 export async function PUT(request) {
     const {searchParams}=new URL(request.url)
     const id=searchParams.get("id")
@@ -24,18 +39,19 @@ export async function PUT(request) {
       });
       if(updateProduct){
         return Response.json({
-            status:200,message:"Product Created"
+            status:200,message:"Product Updated"
         },{status:200})
       }
       else{
         return Response.json({
-            status:400,message:"Unable to Create Product"
+            status:400,message:"Unable to Update Product"
         },{status:400})
       }
     } catch (error) {
-      console.log(error.message)
+      console.log(error?.message || error)
         return Response.json({
-            status:500,message:error
+            status:500,
+            message: formatMongoError(error)
         },{status:500})
     }
   }

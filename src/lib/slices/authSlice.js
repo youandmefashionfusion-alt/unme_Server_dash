@@ -17,7 +17,8 @@ export const checkAuthStatus = createAsyncThunk(
     }
 
     const response = await fetch('/api/user/session', {
-      headers
+      headers,
+      credentials: 'include',
     });
     
     if (!response.ok) {
@@ -25,6 +26,12 @@ export const checkAuthStatus = createAsyncThunk(
     }
     
     const session = await response.json();
+
+    if (typeof window !== 'undefined' && session?.user?.token) {
+      localStorage.setItem('adminAuthToken', session.user.token);
+      localStorage.setItem('userData', JSON.stringify(session.user));
+    }
+
     return session;
   }
 );

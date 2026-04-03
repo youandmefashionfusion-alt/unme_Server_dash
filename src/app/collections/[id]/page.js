@@ -284,7 +284,7 @@ const CollectionDetail = () => {
     if (loading) {
         return (
             <div className={styles.loading}>
-                <div className={styles.spinner}></div>
+                <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Loading" style={{ width: 200, height: 200, display: "inline-block" }} />
                 <p>Loading collection...</p>
             </div>
         )
@@ -480,7 +480,10 @@ const CollectionDetail = () => {
                     </div>
 
                     {productsLoading ? (
-                        <div className={styles.loading}>Loading products...</div>
+                        <div className={styles.loading}>
+                            <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Loading products" style={{ width: 160, height: 160, display: "inline-block" }} />
+                            <p>Loading products...</p>
+                        </div>
                     ) : products.length === 0 ? (
                         <div className={styles.noProducts}>
                             <p>No products in this collection yet.</p>
@@ -552,3 +555,6 @@ const CollectionDetail = () => {
 }
 
 export default CollectionDetail
+
+
+

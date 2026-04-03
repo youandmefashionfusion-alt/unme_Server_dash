@@ -2,25 +2,32 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Search, Calendar, MapPin, Phone, Package, X, Download } from 'lucide-react';
+import { Plus, Search, Calendar, MapPin, Phone, Package, X, Check, Download, Trash2, Gift } from 'lucide-react';
 import { useOrders } from '../controller/useOrders';
 import styles from '../src/app/orders/orders.module.css';
 import filterStyles from '../src/app/orders/orderFilters.module.css';
 import toast from 'react-hot-toast';
 import { useSelector } from 'react-redux';
 
-// ── Filter definitions ────────────────────────────────────────────────────────
+// Filter definitions
 const FILTERS = [
   { key: 'all', label: 'All', color: 'default' },
   { key: 'confirmed', label: 'Confirmed', color: 'green' },
   { key: 'pending', label: 'Pending', color: 'yellow' },
-  { key: 'fulfilled', label: 'Fulfilled', color: 'blue' },
   { key: 'cancelled', label: 'Cancelled', color: 'red' },
   { key: 'returned', label: 'Returned', color: 'orange' },
   { key: 'cod', label: 'COD', color: 'amber' },
   { key: 'prepaid', label: 'Prepaid', color: 'purple' },
-  { key: 'arriving', label: 'Arriving Today', color: 'teal' },
 ];
+
+const ALLOWED_DELETE_ADMIN = {
+  mobile: '9719250693',
+  firstname: 'ujjawal',
+  email: 'ujjawal@codexae.com',
+};
+const INR_SYMBOL = '\u20B9';
+
+const normalize = (value) => String(value || '').trim().toLowerCase();
 
 export default function OrdersPage() {
   const router = useRouter();
@@ -37,6 +44,10 @@ export default function OrdersPage() {
   const [exportLoading, setExportLoading] = useState(false);
   const { orders, loading, pagination, fetchOrders, updateOrderStatus, filters } = useOrders();
   const { user } = useSelector((state) => state.auth);
+  const canDeleteOrders =
+    normalize(user?.mobile) === normalize(ALLOWED_DELETE_ADMIN.mobile) &&
+    normalize(user?.firstname) === normalize(ALLOWED_DELETE_ADMIN.firstname) &&
+    normalize(user?.email) === normalize(ALLOWED_DELETE_ADMIN.email);
 
   useEffect(() => {
     fetchOrders(page, searchQuery, activeFilter, startDate, endDate);
@@ -68,7 +79,7 @@ export default function OrdersPage() {
       fetchOrders(page, searchQuery, activeFilter);
     }
     const orderItemsString = order?.orderItems?.map((item) => {
-      return `• ${item.product.title} - ₹${item.product.price} x ${item.quantity}`;
+      return `- ${item.product.title} - ${INR_SYMBOL}${item.product.price} x ${item.quantity}`;
     }).join('<br>');
     try {
       const res = await fetch(`/api/order/update-order-tag?id=${order._id}&token=${user?.token}&tag=Confirm`);
@@ -116,6 +127,43 @@ export default function OrdersPage() {
       if (data) toast.success(data.message);
     } catch (err) {
       console.log(err);
+    }
+  };
+
+  const handleDeleteOrder = async (order) => {
+    if (!canDeleteOrders) {
+      toast.error('You are not authorized to delete orders');
+      return;
+    }
+    if (!confirm(`Delete order #${order?.orderNumber}? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/order/delete-order?id=${order?._id}&token=${user?.token}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || 'Failed to delete order');
+      }
+
+      await fetch('/api/order/set-history', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: order?._id,
+          name: user?.firstname || 'Admin',
+          message: `Order deleted by ${user?.firstname || 'admin'}`,
+          time: new Date(),
+        }),
+      });
+
+      toast.success('Order deleted successfully');
+      fetchOrders(page, searchQuery, activeFilter, startDate, endDate);
+    } catch (error) {
+      toast.error(error.message || 'Unable to delete order');
     }
   };
 
@@ -215,7 +263,7 @@ export default function OrdersPage() {
   if (loading && orders.length === 0) {
     return (
       <div className={styles.loading}>
-        <div className={styles.spinner}></div>
+        <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Loading" style={{ width: 200, height: 200, display: "inline-block" }} />
         <p>Loading orders...</p>
       </div>
     );
@@ -281,13 +329,13 @@ export default function OrdersPage() {
         </div>
       </div>
 
-      {/* ── Filter Toggles ── */}
+      {/* Filter Toggles */}
       <div className={filterStyles.filterBar}>
         {FILTERS.map((filter) => {
           const stats = filters?.[filter.key] || { count: 0, total: 0 };
           const display = filter.key === 'all'
             ? filter.label
-            : `${filter.label} (${stats.count} - ₹${stats.total})`;
+            : `${filter.label} (${stats.count} - ${INR_SYMBOL}${stats.total})`;
           return (
             <button
               key={filter.key}
@@ -385,6 +433,22 @@ export default function OrdersPage() {
                       <div>
                         <p className={styles.previewTitle}>{item.product?.title}</p>
                         <p className={styles.previewQty}>Qty: {item.quantity}</p>
+                        {(item?.giftWrap || item?.isGift) && (
+                          <div className={styles.previewGiftMeta}>
+                            {item?.giftWrap && (
+                              <p className={styles.previewGiftBadge}>
+                                <Gift size={12} />
+                                Gift Wrap
+                              </p>
+                            )}
+                            {item?.isGift && item?.giftMessage && (
+                              <div className={styles.previewMessageCard}>
+                                <p className={styles.previewMessageHeading}>Custom Message</p>
+                                <p className={styles.previewMessageText}>{item.giftMessage}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -397,7 +461,7 @@ export default function OrdersPage() {
                 <div className={styles.cardFooter}>
                   <div>
                     <span className={styles.label}>Total</span>
-                    <span className={styles.amount}>₹{order.finalAmount}</span>
+                    <span className={styles.amount}>{INR_SYMBOL}{order.finalAmount}</span>
                   </div>
                   <div className={styles.actions}>
                     <Link href={`/orders/${order._id}`} className={styles.viewBtn}>
@@ -409,7 +473,7 @@ export default function OrdersPage() {
                         className={styles.confirmBtn}
                         title="Confirm"
                       >
-                        ✓
+                        <Check size={14} />
                       </button>
                     )}
                     {order.orderType !== 'Cancelled' && (
@@ -418,7 +482,16 @@ export default function OrdersPage() {
                         className={styles.cancelBtn}
                         title="Cancel"
                       >
-                        ✕
+                        <X size={14} />
+                      </button>
+                    )}
+                    {canDeleteOrders && (
+                      <button
+                        onClick={() => handleDeleteOrder(order)}
+                        className={styles.cancelBtn}
+                        title="Delete Order"
+                      >
+                        <Trash2 size={14} />
                       </button>
                     )}
                   </div>

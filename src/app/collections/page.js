@@ -92,7 +92,7 @@ const CollectionsPage = () => {
     if (loading) {
         return (
             <div className={styles.loading}>
-                <div className={styles.spinner}></div>
+                <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Loading collections" style={{ width: 200, height: 200, display: "inline-block" }} />
                 <p>Loading collections...</p>
             </div>
         )
@@ -201,3 +201,5 @@ const CollectionsPage = () => {
 }
 
 export default CollectionsPage
+
+

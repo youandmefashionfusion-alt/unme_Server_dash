@@ -86,6 +86,24 @@ var orderSchema = new mongoose.Schema(
         type: Number,
         required: true
       },
+      isGift: {
+        type: Boolean,
+        default: false,
+      },
+      giftWrap: {
+        type: Boolean,
+        default: false,
+      },
+      giftWrapCharge: {
+        type: Number,
+        default: 0,
+      },
+      giftMessage: {
+        type: String,
+        trim: true,
+        default: "",
+        maxlength: 180,
+      },
     }],
     paidAt: {
       type: Date,
@@ -110,6 +128,10 @@ var orderSchema = new mongoose.Schema(
     discount: {
       type: Number,
       required: true,
+    },
+    giftWrapTotal: {
+      type: Number,
+      default: 0,
     },
     finalAmount: {
       type: Number,

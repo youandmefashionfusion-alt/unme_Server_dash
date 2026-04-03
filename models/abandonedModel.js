@@ -47,6 +47,23 @@ var abondendSchema = new mongoose.Schema(
         price: {
           type: Number,
         },
+        isGift: {
+          type: Boolean,
+          default: false,
+        },
+        giftWrap: {
+          type: Boolean,
+          default: false,
+        },
+        giftWrapCharge: {
+          type: Number,
+          default: 0,
+        },
+        giftMessage: {
+          type: String,
+          trim: true,
+          default: "",
+        },
         color: {
           type: String,
         },
@@ -66,6 +83,10 @@ var abondendSchema = new mongoose.Schema(
     },
     discount: {
       type: Number,
+    },
+    giftWrapTotal: {
+      type: Number,
+      default: 0,
     },
     finalAmount: {
       type: Number,

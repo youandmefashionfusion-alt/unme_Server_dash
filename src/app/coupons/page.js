@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 import React, { useEffect, useState } from 'react'
 import styles from './coupon.module.css'
 import { Plus, Calendar, Users, Tag, Clock } from 'lucide-react'
@@ -40,7 +40,7 @@ const CouponsList = () => {
   const getDiscountDisplay = (discount, discountType) => {
     if (discount?.endsWith("%")) return discount
     if (discountType === 'freeShip') return 'Free Shipping'
-    return `₹${discount}`
+    return `â‚¹${discount}`
   }
 
   const getCustomerTypeDisplay = (customerType, email) => {
@@ -51,7 +51,7 @@ const CouponsList = () => {
   if (loading) {
     return (
       <div className={styles.loadingContainer}>
-        <div className={styles.spinner}></div>
+        <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Loading" style={{ width: 200, height: 200, display: "inline-block" }} />
         <p>Loading coupons...</p>
       </div>
     )
@@ -188,3 +188,6 @@ const CouponsList = () => {
 }
 
 export default CouponsList
+
+
+

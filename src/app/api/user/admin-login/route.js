@@ -4,6 +4,12 @@ import { generateadminRefreshToken } from "../../../../../config/refreshtoken";
 import { generateToken } from "../../../../../config/jwtToken";
 import { NextResponse } from "next/server";
 
+const DEFAULT_REFRESH_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60; // 365 days
+const ADMIN_REFRESH_COOKIE_MAX_AGE_SECONDS = Number.parseInt(
+  process.env.ADMIN_REFRESH_COOKIE_MAX_AGE_SECONDS || `${DEFAULT_REFRESH_COOKIE_MAX_AGE_SECONDS}`,
+  10
+);
+
 export async function POST(req) {
   try {
     const body = await req.json();
@@ -130,7 +136,9 @@ export async function POST(req) {
     response.cookies.set("adminRefreshToken", adminRefreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production", // Secure in production
-      maxAge: 72 * 60 * 60 * 1000, // 72 hours in milliseconds
+      maxAge: Number.isFinite(ADMIN_REFRESH_COOKIE_MAX_AGE_SECONDS)
+        ? ADMIN_REFRESH_COOKIE_MAX_AGE_SECONDS
+        : DEFAULT_REFRESH_COOKIE_MAX_AGE_SECONDS,
       path: "/",
       sameSite: "strict",
     });

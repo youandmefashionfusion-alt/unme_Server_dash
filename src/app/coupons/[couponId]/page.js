@@ -133,7 +133,7 @@ const CouponForm = ({ params }) => {
   if (loading) {
     return (
       <div className={styles.loadingContainer}>
-        <div className={styles.spinner}></div>
+        <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Loading" style={{ width: 200, height: 200, display: "inline-block" }} />
         <p>Loading coupon...</p>
       </div>
     )
@@ -161,7 +161,7 @@ const CouponForm = ({ params }) => {
           disabled={saving}
         >
           {saving ? (
-            <div className={styles.spinner}></div>
+            <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Saving" style={{ width: 40, height: 40, display: "inline-block" }} />
           ) : (
             <Save size={18} />
           )}
@@ -337,3 +337,5 @@ const CouponForm = ({ params }) => {
 }
 
 export default CouponForm
+
+

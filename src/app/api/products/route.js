@@ -12,7 +12,10 @@ export async function GET(request) {
     await connectDb();
 
     let query = {};
-    query.state = searchParams.get("state") || "active";
+    const stateParam = (searchParams.get("state") || "").trim().toLowerCase();
+    if (stateParam && stateParam !== "all") {
+      query.state = stateParam;
+    }
 
     // Filtering by collectionHandle
     if (searchParams.get("collectionHandle")) {

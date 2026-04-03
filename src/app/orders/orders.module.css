@@ -251,6 +251,59 @@
   margin: 0;
 }
 
+.previewGiftMeta {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.previewGiftBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #7A5B1F;
+  background: #FFF7E6;
+  border: 1px solid #F3D9A1;
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+.previewMessageCard {
+  background: linear-gradient(135deg, #FFF8EC 0%, #FFFFFF 100%);
+  border: 1px solid #F0DEB6;
+  border-left: 3px solid #B4975A;
+  border-radius: 10px;
+  padding: 8px 10px;
+  box-shadow: 0 2px 6px rgba(180, 151, 90, 0.12);
+}
+
+.previewMessageHeading {
+  margin: 0 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8A6A2E;
+}
+
+.previewMessageText {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: #1F2937;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .more {
   display: block;
   margin-top: 8px;
@@ -490,6 +543,7 @@
 .selectedItem {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 16px;
   background: #F9FAFB;
@@ -567,6 +621,45 @@
   background: #FEE2E2;
 }
 
+.itemGiftControls {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #E5E7EB;
+}
+
+.itemCheckboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #4B5563;
+}
+
+.itemCheckboxLabel input {
+  accent-color: #B4975A;
+}
+
+.itemGiftTextarea {
+  width: 100%;
+  border: 1px solid #E5E7EB;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #111827;
+  resize: vertical;
+  min-height: 68px;
+}
+
+.itemGiftTextarea:focus {
+  outline: none;
+  border-color: #B4975A;
+  box-shadow: 0 0 0 3px rgba(180, 151, 90, 0.15);
+}
+
 .emptyProducts {
   text-align: center;
   color: #6B7280;
@@ -626,6 +719,7 @@
 .orderItem {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 16px;
   padding: 16px;
   background: #F9FAFB;
@@ -1149,6 +1243,58 @@
   color: #6B7280;
   padding-left: 12px;
   border-left: 1px solid #E5E7EB;
+}
+
+.itemGiftMeta {
+  margin-top: 10px;
+  background: linear-gradient(135deg, #FFF8EC 0%, #FFFFFF 100%);
+  border: 1px solid #F0DEB6;
+  border-left: 4px solid #B4975A;
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.itemGiftBadge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  font-size: 11px;
+  font-weight: 700;
+  color: #7A5B1F;
+  background: #FFF7E6;
+  border: 1px solid #F3D9A1;
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+.itemGiftMessageCard {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px dashed #E7D3A9;
+  border-radius: 10px;
+  padding: 8px 10px;
+  box-shadow: 0 2px 8px rgba(180, 151, 90, 0.1);
+}
+
+.itemGiftHeading {
+  margin: 0 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8A6A2E;
+}
+
+.itemGiftMessage {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1F2937;
+  line-height: 1.45;
+  word-break: break-word;
+  white-space: pre-wrap;
 }
 
 .detailItemTotal {

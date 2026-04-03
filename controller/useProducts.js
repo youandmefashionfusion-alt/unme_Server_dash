@@ -3,6 +3,8 @@ import { useSelector } from 'react-redux';
 import { useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 
+const PRODUCTS_PER_PAGE = 60;
+
 export const useProducts = () => {
   const [products, setProducts] = useState([]);
   const [collections, setCollections] = useState([]);
@@ -14,7 +16,7 @@ export const useProducts = () => {
   const searchParams = useSearchParams();
 
   const page = parseInt(searchParams.get('page')) || 1;
-  const stateFilter = searchParams.get('state') || '';
+  const stateFilter = searchParams.get('state') || 'all';
   const collectionFilter = searchParams.get('collection') || '';
 
   // Fetch collections
@@ -34,8 +36,8 @@ export const useProducts = () => {
     try {
       const query = new URLSearchParams({
         page,
-        limit: 20,
-        ...(stateFilter && { state: stateFilter }),
+        limit: PRODUCTS_PER_PAGE,
+        state: stateFilter,
         ...(collectionFilter && { collectionHandle: collectionFilter }),
       });
 
@@ -47,8 +49,10 @@ export const useProducts = () => {
       const data = await res.json();
       
       if (res.ok) {
+        const currentPage = data?.pagination?.currentPage || page;
+        const totalPages = data?.pagination?.totalPages || currentPage;
         setProducts(data.products || []);
-        setPagination({ page, hasMore: (data.products?.length || 0) === 20 });
+        setPagination({ page: currentPage, hasMore: currentPage < totalPages });
       } else {
         toast.error('Failed to fetch products');
       }

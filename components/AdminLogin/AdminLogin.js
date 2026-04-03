@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import { useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { Lock, Phone, Eye, EyeOff } from 'lucide-react';
@@ -160,7 +160,7 @@ const AdminLogin = () => {
           >
             {loading ? (
               <>
-                <div className={styles.buttonSpinner}></div>
+                <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Signing in" style={{ width: 40, height: 40, display: "inline-block" }} />
                 Signing in...
               </>
             ) : (
@@ -171,7 +171,7 @@ const AdminLogin = () => {
 
         {/* Footer */}
         <div className={styles.footer}>
-          <p>© {new Date().getFullYear()} UnMe Jewels. Secure admin access.</p>
+          <p>Â© {new Date().getFullYear()} UnMe Jewels. Secure admin access.</p>
         </div>
       </div>
     </div>
@@ -179,3 +179,6 @@ const AdminLogin = () => {
 };
 
 export default AdminLogin;
+
+
+

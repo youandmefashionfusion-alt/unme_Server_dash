@@ -3,19 +3,78 @@ import ProductModel from "../../../../../models/productModel";
 import OrderModel from "../../../../../models/orderModel";
 import UserModel from "../../../../../models/userModel";
 import connectDb from "../../../../../config/connectDb";
-import { CHECKOUT_STANDARD_COD_CHARGE } from "../../../../lib/orderPricing";
+import {
+  CHECKOUT_STANDARD_COD_CHARGE,
+  CHECKOUT_STANDARD_GIFT_WRAP_CHARGE,
+} from "../../../../lib/orderPricing";
 
 export const config = {
   maxDuration: 10,
 };
 
+const toFiniteNumber = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const sanitizeGiftMessage = (message) => String(message || "").trim().slice(0, 180);
+
+const getProductId = (product) => {
+  if (!product) return "";
+  if (typeof product === "string") return product;
+  if (typeof product === "object" && product?._id) return String(product._id);
+  return "";
+};
+
+const sanitizeOrderItems = (items) => {
+  if (!Array.isArray(items)) return [];
+
+  return items
+    .map((item) => {
+      const quantity = Math.max(toFiniteNumber(item?.quantity), 0);
+      const productId = getProductId(item?.product);
+      const giftWrap = Boolean(item?.giftWrap);
+      const isGift = Boolean(item?.isGift);
+      const giftWrapCharge = giftWrap
+        ? Math.max(
+            toFiniteNumber(item?.giftWrapCharge) || CHECKOUT_STANDARD_GIFT_WRAP_CHARGE,
+            0
+          )
+        : 0;
+
+      return {
+        ...item,
+        product: productId,
+        quantity,
+        isGift,
+        giftWrap,
+        giftWrapCharge,
+        giftMessage: isGift ? sanitizeGiftMessage(item?.giftMessage) : "",
+      };
+    })
+    .filter((item) => Boolean(item.product) && item.quantity > 0);
+};
+
+const getGiftWrapTotalFromItems = (items) => {
+  if (!Array.isArray(items)) return 0;
+  const hasGiftWrap = items.some((item) => Boolean(item?.giftWrap));
+  return hasGiftWrap ? CHECKOUT_STANDARD_GIFT_WRAP_CHARGE : 0;
+};
+
 const processOrder = async (orderItems) => {
   try {
     for (const orderItem of orderItems) {
-      const { product, quantity } = orderItem;
-      const productId = product;
+      const productId = getProductId(orderItem?.product);
+      const quantity = Math.max(toFiniteNumber(orderItem?.quantity), 0);
+
+      if (!productId || quantity <= 0) {
+        continue;
+      }
 
       const foundProduct = await ProductModel.findById(productId);
+      if (!foundProduct) {
+        throw new Error(`Product with ID ${productId} not found`);
+      }
 
       if (foundProduct.quantity >= quantity) {
         foundProduct.quantity -= quantity;
@@ -139,8 +198,8 @@ const validateOrderPricesAndAmounts = async (orderItems, totalPrice, finalAmount
     let calculatedTotalPrice = 0;
 
     for (const orderItem of orderItems) {
-      const { product, quantity } = orderItem;
-      const productId = product;
+      const productId = getProductId(orderItem?.product);
+      const quantity = Math.max(toFiniteNumber(orderItem?.quantity), 0);
 
       const foundProduct = await ProductModel.findById(productId);
 
@@ -196,32 +255,60 @@ export async function POST(req,res){
   try {
     await connectDb()
 
-    const normalizedTotalPrice = Number(totalPrice) || 0;
-    const normalizedShippingCost = Number(shippingCost) || 0;
-    const normalizedDiscount = Number(discount) || 0;
-    const requestedCodCharge = Math.max(Number(codCharge) || 0, 0);
+    const normalizedOrderItems = sanitizeOrderItems(orderItems);
+    if (!normalizedOrderItems.length) {
+      return Response.json(
+        { success: false, error: "Order must include at least one valid item" },
+        { status: 400 }
+      );
+    }
+
+    const normalizedTotalPrice = Math.max(toFiniteNumber(totalPrice), 0);
+    const normalizedShippingCost = Math.max(toFiniteNumber(shippingCost), 0);
+    const normalizedDiscount = Math.max(toFiniteNumber(discount), 0);
+    const normalizedOrderType =
+      String(orderType || "").toUpperCase() === "COD" ? "COD" : "Prepaid";
+    const normalizedGiftWrapTotal = getGiftWrapTotalFromItems(normalizedOrderItems);
+    const requestedCodCharge = Math.max(toFiniteNumber(codCharge), 0);
     const inferredCodCharge = Math.max(
-      Number(finalAmount || 0) -
-        (normalizedTotalPrice + normalizedShippingCost - normalizedDiscount),
+      toFiniteNumber(finalAmount) -
+        (normalizedTotalPrice +
+          normalizedGiftWrapTotal +
+          normalizedShippingCost -
+          normalizedDiscount),
       0
     );
     const normalizedCodCharge =
-      orderType === 'COD'
+      normalizedOrderType === "COD"
         ? requestedCodCharge > 0
           ? requestedCodCharge
           : inferredCodCharge > 0
             ? inferredCodCharge
             : CHECKOUT_STANDARD_COD_CHARGE
         : 0;
-    const resolvedFinalAmount = Number.isFinite(Number(finalAmount))
-      ? Number(finalAmount)
-      : normalizedTotalPrice - normalizedDiscount + normalizedShippingCost + normalizedCodCharge;
+    const normalizedPaymentInfo = {
+      razorpayOrderId:
+        String(paymentInfo?.razorpayOrderId || "").trim() ||
+        (normalizedOrderType === "COD" ? "COD" : "MANUAL"),
+      razorpayPaymentId:
+        String(paymentInfo?.razorpayPaymentId || "").trim() ||
+        (normalizedOrderType === "COD" ? "COD" : "MANUAL"),
+      ...(paymentInfo?.paymentId
+        ? { paymentId: String(paymentInfo.paymentId) }
+        : {}),
+    };
+    const resolvedFinalAmount =
+      normalizedTotalPrice +
+      normalizedGiftWrapTotal +
+      normalizedShippingCost +
+      normalizedCodCharge -
+      normalizedDiscount;
 
     // await validateOrderPricesAndAmounts(orderItems, totalPrice, finalAmount, discount, shippingCost);
 
-    for (const orderItem of orderItems) {
-      const { product, quantity } = orderItem;
-      const productId = product;
+    for (const orderItem of normalizedOrderItems) {
+      const productId = getProductId(orderItem?.product);
+      const quantity = Math.max(toFiniteNumber(orderItem?.quantity), 0);
 
       const foundProduct = await ProductModel.findById(productId);
 
@@ -237,14 +324,15 @@ export async function POST(req,res){
     // Create the order
     const order = await OrderModel.create({
       shippingInfo,
-      orderItems,
+      orderItems: normalizedOrderItems,
       totalPrice: normalizedTotalPrice,
       finalAmount: resolvedFinalAmount,
       shippingCost: normalizedShippingCost,
+      giftWrapTotal: normalizedGiftWrapTotal,
       codCharge: normalizedCodCharge,
-      orderType,
+      orderType: normalizedOrderType,
       discount: normalizedDiscount,
-      paymentInfo,
+      paymentInfo: normalizedPaymentInfo,
       tag,
       isPartial
     });
@@ -324,15 +412,15 @@ export async function POST(req,res){
                             <table width="100%" border="0" cellpadding="0" cellspacing="0">
                                 <tr>
                                     <td style="padding: 8px 0; color: #666; font-family: Arial, sans-serif;">Subtotal:</td>
-                                    <td style="padding: 8px 0; text-align: right; color: #666; font-family: Arial, sans-serif;">₹${totalPrice}</td>
+                                    <td style="padding: 8px 0; text-align: right; color: #666; font-family: Arial, sans-serif;">₹${normalizedTotalPrice}</td>
                                 </tr>
                                 <tr>
                                     <td style="padding: 8px 0; color: #666; font-family: Arial, sans-serif;">Shipping:</td>
-                                    <td style="padding: 8px 0; text-align: right; color: #10b981; font-weight: bold; font-family: Arial, sans-serif;">${shippingCost === 0 ? 'FREE' : `₹${shippingCost}`}</td>
+                                    <td style="padding: 8px 0; text-align: right; color: #10b981; font-weight: bold; font-family: Arial, sans-serif;">${normalizedShippingCost === 0 ? 'FREE' : `₹${normalizedShippingCost}`}</td>
                                 </tr>
                                 <tr>
                                     <td style="padding: 15px 0 0; font-size: 18px; font-weight: bold; color: #333; font-family: Arial, sans-serif;">Total:</td>
-                                    <td style="padding: 15px 0 0; text-align: right; font-size: 20px; font-weight: bold; color: #d4af37; font-family: Arial, sans-serif;">₹${finalAmount}</td>
+                                    <td style="padding: 15px 0 0; text-align: right; font-size: 20px; font-weight: bold; color: #d4af37; font-family: Arial, sans-serif;">₹${resolvedFinalAmount}</td>
                                 </tr>
                             </table>
                         </div>
@@ -392,7 +480,7 @@ export async function POST(req,res){
     }
 
     // Update the inventory
-    await processOrder(orderItems);
+    await processOrder(normalizedOrderItems);
 
     // Schedule a message after 3 hours with order details
     setTimeout(async () => {

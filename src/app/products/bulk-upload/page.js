@@ -12,6 +12,7 @@ const BulkUploadPage = () => {
   const [collections, setCollections] = useState([]);
   const [selectedCollection, setSelectedCollection] = useState('');
   const [selectedHandle, setSelectedHandle] = useState('');
+  const [defaultProductState, setDefaultProductState] = useState('draft');
   const [file, setFile] = useState(null);
   const [products, setProducts] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -43,6 +44,14 @@ const BulkUploadPage = () => {
       .replace(/\s+/g, '-')
       .replace(/-+/g, '-')
       .replace(/^-|-$/g, '');
+  }, []);
+
+  const normalizeProductState = useCallback((value, fallback = 'draft') => {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (normalized === 'active' || normalized === 'draft') {
+      return normalized;
+    }
+    return fallback;
   }, []);
 
   // Upload image URL to S3 via backend
@@ -110,6 +119,11 @@ const BulkUploadPage = () => {
 
             const rawSizes = row['Sizes'] ?? row['Ring Size'] ?? '';
 
+            const parsedState = normalizeProductState(
+              row['State'] ?? row['Status'] ?? row['Product Status'],
+              defaultProductState
+            );
+
             return {
               title: row['Product Title']?.trim() || '',
               description: `<p>${row['Description'] || ''}</p>`,
@@ -127,7 +141,7 @@ const BulkUploadPage = () => {
                 : [],
               imageUrls: images.filter(Boolean),
               sku,
-              state: 'active',
+              state: parsedState,
               bossPicks: false,
               gatawayJewels: false,
               isFeatured: false,
@@ -148,7 +162,7 @@ const BulkUploadPage = () => {
       reader.onerror = reject;
       reader.readAsArrayBuffer(file);
     });
-  }, []);
+  }, [defaultProductState, normalizeProductState]);
 
   // Handle file selection
   const handleFileChange = async (e) => {
@@ -233,6 +247,7 @@ const BulkUploadPage = () => {
         // Prepare product data
         const productData = {
           ...product,
+          state: normalizeProductState(product.state, defaultProductState),
           handle: generateHandle(product.title),
           collectionName: selectedCollection,
           collectionHandle: selectedHandle,
@@ -294,6 +309,7 @@ const BulkUploadPage = () => {
       {
         'Product Title': 'Gold Pendant Necklace',
         'Description': 'Elegant gold plated pendant necklace',
+        'Status': 'draft',
         'Price': 899,
         'Cross Price': 1499,
         'Quantity': 15,
@@ -379,6 +395,17 @@ const BulkUploadPage = () => {
               </select>
             </div>
 
+            <div className={styles.collectionSelect}>
+              <select
+                value={defaultProductState}
+                onChange={(e) => setDefaultProductState(normalizeProductState(e.target.value, 'draft'))}
+                className={styles.select}
+              >
+                <option value="draft">Default Product Status: Draft</option>
+                <option value="active">Default Product Status: Active</option>
+              </select>
+            </div>
+
             <div className={styles.buttonGroup}>
               <button
                 onClick={() => setStep(2)}
@@ -432,6 +459,7 @@ const BulkUploadPage = () => {
               <div className={styles.previewHeader}>
                 <span>Title</span>
                 <span>SKU</span>
+                <span>Status</span>
                 <span>Price</span>
                 <span>Images</span>
               </div>
@@ -440,6 +468,7 @@ const BulkUploadPage = () => {
                   <div key={i} className={styles.previewItem}>
                     <span className={styles.previewTitle}>{product.title}</span>
                     <span className={styles.previewSku}>{product.sku}</span>
+                    <span className={styles.previewSku}>{product.state}</span>
                     <span className={styles.previewPrice}>₹{product.price}</span>
                     <span className={styles.previewImages}>{product.imageUrls.length} images</span>
                   </div>

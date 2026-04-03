@@ -1,6 +1,5 @@
 'use client';
 import { useRouter } from 'next/navigation';
-import { useSelector } from 'react-redux';
 import { Save, ArrowLeft } from 'lucide-react';
 import { useOrderForm } from '../../../../controller/useOrderForm';
 import ProductSearch from '../../../../components/ProductSearch';
@@ -9,8 +8,17 @@ import toast from 'react-hot-toast';
 
 export default function CreateOrderPage() {
   const router = useRouter();
-  const { user } = useSelector((state) => state.auth);
-  const { formData, totals, setSearch, updateShippingInfo, updateOrderSetting, addProduct, updateQuantity, removeProduct, validate } = useOrderForm();
+  const {
+    formData,
+    totals,
+    updateShippingInfo,
+    updateOrderSetting,
+    addProduct,
+    updateQuantity,
+    updateOrderItem,
+    removeProduct,
+    validate,
+  } = useOrderForm();
 
   const handleSubmit = async () => {
     if (!validate()) return;
@@ -21,8 +29,28 @@ export default function CreateOrderPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          orderItems: formData.orderItems.map((item) => ({
+            product: item?.product?._id,
+            quantity: item?.quantity,
+            price: item?.product?.price,
+            isGift: Boolean(item?.isGift),
+            giftWrap: Boolean(item?.giftWrap),
+            giftWrapCharge: item?.giftWrap ? Number(item?.giftWrapCharge || 69) : 0,
+            giftMessage: item?.isGift ? String(item?.giftMessage || '') : '',
+          })),
           codCharge: formData.orderType === 'COD' ? Number(formData.codCharge || 0) : 0,
           totalPrice: totals.subtotal,
+          giftWrapTotal: totals.giftWrapTotal,
+          paymentInfo:
+            formData.orderType === 'COD'
+              ? {
+                  razorpayOrderId: 'COD',
+                  razorpayPaymentId: 'COD',
+                }
+              : {
+                  razorpayOrderId: 'MANUAL',
+                  razorpayPaymentId: 'MANUAL',
+                },
           finalAmount: totals.total,
         }),
       });
@@ -93,6 +121,40 @@ export default function CreateOrderPage() {
                     >
                       ✕
                     </button>
+                  </div>
+                  <div className={styles.itemGiftControls}>
+                    <label className={styles.itemCheckboxLabel}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(item.giftWrap)}
+                        onChange={(e) =>
+                          updateOrderItem(index, { giftWrap: e.target.checked })
+                        }
+                      />
+                      Gift wrap (+Rs {item.giftWrap ? item.giftWrapCharge : 69} order-level)
+                    </label>
+                    <label className={styles.itemCheckboxLabel}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(item.isGift)}
+                        onChange={(e) =>
+                          updateOrderItem(index, { isGift: e.target.checked })
+                        }
+                      />
+                      Mark as gift
+                    </label>
+                    {item.isGift && (
+                      <textarea
+                        rows={2}
+                        maxLength={180}
+                        value={item.giftMessage || ''}
+                        onChange={(e) =>
+                          updateOrderItem(index, { giftMessage: e.target.value })
+                        }
+                        placeholder="Gift message (max 180 chars)"
+                        className={styles.itemGiftTextarea}
+                      />
+                    )}
                   </div>
                 </div>
               ))}
@@ -236,6 +298,12 @@ export default function CreateOrderPage() {
                 <span>Shipping</span>
                 <span>+₹{formData.shippingCost}</span>
               </div>
+              {totals.giftWrapTotal > 0 && (
+                <div className={styles.summaryRow}>
+                  <span>Gift Wrap (Order Level)</span>
+                  <span>+₹{totals.giftWrapTotal}</span>
+                </div>
+              )}
               <div className={styles.summaryRow}>
                 <span>Discount</span>
                 <span>-₹{formData.discount}</span>

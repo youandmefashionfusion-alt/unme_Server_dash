@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSelector } from 'react-redux';
-import { Eye, Trash2, Search, Filter, Calendar, Phone, Mail, ShoppingCart } from 'lucide-react';
+import { Eye, Trash2, Search, Filter, Calendar, Phone, Mail, ShoppingCart, Gift } from 'lucide-react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import styles from '../src/app/orders/orders.module.css';
@@ -201,7 +201,7 @@ const Abandoned = () => {
   if (loading && abandonedOrders.length === 0) {
     return (
       <div className={styles.loading}>
-        <div className={styles.spinner}></div>
+        <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Loading" style={{ width: 200, height: 200, display: "inline-block" }} />
         <p>Loading abandoned orders...</p>
       </div>
     );
@@ -306,6 +306,22 @@ const Abandoned = () => {
                       <div>
                         <p className={styles.previewTitle}>{item?.product?.title || 'Product removed'}</p>
                         <p className={styles.previewQty}>Qty: {item.quantity} x Rs.{formatCurrency(item.price)}</p>
+                        {(item?.giftWrap || item?.isGift) && (
+                          <div className={styles.previewGiftMeta}>
+                            {item?.giftWrap && (
+                              <p className={styles.previewGiftBadge}>
+                                <Gift size={12} />
+                                Gift Wrap
+                              </p>
+                            )}
+                            {item?.isGift && item?.giftMessage && (
+                              <div className={styles.previewMessageCard}>
+                                <p className={styles.previewMessageHeading}>Custom Message</p>
+                                <p className={styles.previewMessageText}>{item.giftMessage}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}

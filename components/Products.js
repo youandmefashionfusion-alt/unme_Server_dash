@@ -1,9 +1,9 @@
-'use client';
+﻿'use client';
 
 import React, { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Filter, X, Download } from 'lucide-react';
+import { Plus, Filter, X, Download, ShoppingBag } from 'lucide-react';
 import { useProducts } from '../controller/useProducts';
 import ProductCard from './ProductCard';
 import styles from '../src/app/products/Products.module.css';
@@ -48,10 +48,10 @@ const ProductsPage = () => {
   }, []);
 
   const clearFilters = useCallback(() => {
-    updateFilters({ state: '', collection: '', page: 1 });
+    updateFilters({ state: 'all', collection: '', page: 1 });
   }, [updateFilters]);
 
-  const hasActiveFilters = filters.state || filters.collection;
+  const hasActiveFilters = (filters.state && filters.state !== 'all') || filters.collection;
   const handleExport = async () => {
     try {
       const response = await fetch(`/api/products/export`, {
@@ -120,7 +120,7 @@ const ProductsPage = () => {
             onChange={(e) => updateFilters({ state: e.target.value, page: 1 })}
             className={styles.filterSelect}
           >
-            <option value="">All Status</option>
+            <option value="all">All Status</option>
             <option value="active">Active</option>
             <option value="draft">Draft</option>
             <option value="inactive">Inactive</option>
@@ -151,12 +151,14 @@ const ProductsPage = () => {
       {/* Products Grid */}
       {loading && products.length === 0 ? (
         <div className={styles.loading}>
-          <div className={styles.spinner}></div>
+          <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Loading" style={{ width: 200, height: 200, display: "inline-block" }} />
           <p>Loading products...</p>
         </div>
       ) : products.length === 0 ? (
         <div className={styles.empty}>
-          <div className={styles.emptyIcon}>🛍️</div>
+          <div className={styles.emptyIcon}>
+            <ShoppingBag size={48} aria-hidden="true" />
+          </div>
           <h3>No products found</h3>
           <p>{hasActiveFilters ? 'Try adjusting your filters' : 'Add your first product to get started'}</p>
           {!hasActiveFilters && (
@@ -206,3 +208,6 @@ const ProductsPage = () => {
 };
 
 export default ProductsPage;
+
+
+

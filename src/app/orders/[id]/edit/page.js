@@ -7,7 +7,6 @@ import { useOrderForm } from '../../../../../controller/useOrderForm';
 import ProductSearch from '../../../../../components/ProductSearch';
 import styles from '../../orders.module.css';
 import toast from 'react-hot-toast';
-import { resolveOrderShippingCost, resolveOrderCodCharge } from '../../../../lib/orderPricing';
 
 export default function EditOrderPage() {
   const params = useParams();
@@ -19,7 +18,18 @@ export default function EditOrderPage() {
   const [saving, setSaving] = useState(false);
   const [originalOrder, setOriginalOrder] = useState(null);
 
-  const { formData, totals, setSearch, updateShippingInfo, updateOrderSetting, addProduct, updateQuantity, removeProduct, validate } = useOrderForm();
+  const {
+    formData,
+    totals,
+    updateShippingInfo,
+    updateOrderSetting,
+    replaceFromOrder,
+    addProduct,
+    updateQuantity,
+    updateOrderItem,
+    removeProduct,
+    validate,
+  } = useOrderForm();
 
   useEffect(() => {
     if (!orderId) return;
@@ -37,34 +47,7 @@ export default function EditOrderPage() {
 
       if (res.ok && hasValidOrder) {
         setOriginalOrder(orderPayload);
-        // Initialize form with existing order data
-        updateShippingInfo('firstname', orderPayload?.shippingInfo?.firstname || '');
-        updateShippingInfo('lastname', orderPayload?.shippingInfo?.lastname || '');
-        updateShippingInfo('email', orderPayload?.shippingInfo?.email || '');
-        updateShippingInfo('phone', String(orderPayload?.shippingInfo?.phone || ''))
-        updateShippingInfo('address', orderPayload?.shippingInfo?.address || '');
-        updateShippingInfo('city', orderPayload?.shippingInfo?.city || '');
-        updateShippingInfo('state', orderPayload?.shippingInfo?.state || '');
-        updateShippingInfo('pincode', String(orderPayload?.shippingInfo?.pincode || ''))
-
-        // Add products one by one
-        if (orderPayload?.orderItems?.length > 0) {
-          orderPayload?.orderItems?.forEach(item => {
-            addProduct(item.product);
-            // Update quantity after product is added
-            setTimeout(() => {
-              const index = formData?.orderItems?.length;
-              updateQuantity(index, item.quantity);
-            }, 0);
-          });
-        }
-
-        updateOrderSetting('orderType', orderPayload.orderType || 'COD');
-        updateOrderSetting('discount', Number(orderPayload.discount) || 0);
-        const normalizedShippingCost = resolveOrderShippingCost(orderPayload);
-        const normalizedCodCharge = resolveOrderCodCharge(orderPayload, normalizedShippingCost);
-        updateOrderSetting('shippingCost', normalizedShippingCost);
-        updateOrderSetting('codCharge', normalizedCodCharge);
+        replaceFromOrder(orderPayload);
       } else {
         toast.error('Order not found');
         router.push('/orders');
@@ -90,8 +73,17 @@ export default function EditOrderPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           shippingInfo: formData.shippingInfo,
-          orderItems: formData.orderItems,
+          orderItems: formData.orderItems.map((item) => ({
+            product: item?.product?._id,
+            quantity: item?.quantity,
+            price: item?.product?.price,
+            isGift: Boolean(item?.isGift),
+            giftWrap: Boolean(item?.giftWrap),
+            giftWrapCharge: item?.giftWrap ? Number(item?.giftWrapCharge || 69) : 0,
+            giftMessage: item?.isGift ? String(item?.giftMessage || '') : '',
+          })),
           totalPrice: totals.subtotal,
+          giftWrapTotal: totals.giftWrapTotal,
           shippingCost: formData.shippingCost,
           codCharge: formData.orderType === 'COD' ? formData.codCharge : 0,
           orderType: formData.orderType,
@@ -151,7 +143,7 @@ export default function EditOrderPage() {
   if (loading) {
     return (
       <div className={styles.loading}>
-        <div className={styles.spinner}></div>
+        <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Loading" style={{ width: 200, height: 200, display: "inline-block" }} />
         <p>Loading order...</p>
       </div>
     );
@@ -224,6 +216,40 @@ export default function EditOrderPage() {
                       >
                         ✕
                       </button>
+                    </div>
+                    <div className={styles.itemGiftControls}>
+                      <label className={styles.itemCheckboxLabel}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(item.giftWrap)}
+                          onChange={(e) =>
+                            updateOrderItem(index, { giftWrap: e.target.checked })
+                          }
+                        />
+                        Gift wrap (+Rs {item.giftWrap ? item.giftWrapCharge : 69} order-level)
+                      </label>
+                      <label className={styles.itemCheckboxLabel}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(item.isGift)}
+                          onChange={(e) =>
+                            updateOrderItem(index, { isGift: e.target.checked })
+                          }
+                        />
+                        Mark as gift
+                      </label>
+                      {item.isGift && (
+                        <textarea
+                          rows={2}
+                          maxLength={180}
+                          value={item.giftMessage || ''}
+                          onChange={(e) =>
+                            updateOrderItem(index, { giftMessage: e.target.value })
+                          }
+                          placeholder="Gift message (max 180 chars)"
+                          className={styles.itemGiftTextarea}
+                        />
+                      )}
                     </div>
                   </div>
                 ))
@@ -371,6 +397,12 @@ export default function EditOrderPage() {
                 <span>Shipping</span>
                 <span>₹{formData.shippingCost}</span>
               </div>
+              {totals.giftWrapTotal > 0 && (
+                <div className={styles.summaryRow}>
+                  <span>Gift Wrap (Order Level)</span>
+                  <span>+₹{totals.giftWrapTotal}</span>
+                </div>
+              )}
               <div className={styles.summaryRow}>
                 <span>Discount</span>
                 <span>-₹{formData.discount}</span>
@@ -392,3 +424,6 @@ export default function EditOrderPage() {
     </div>
   );
 }
+
+
+

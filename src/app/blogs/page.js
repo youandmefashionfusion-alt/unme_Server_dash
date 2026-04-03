@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import React, { useState, useEffect } from 'react'
 import { useSelector } from 'react-redux'
 import { useRouter } from 'next/navigation'
@@ -103,7 +103,7 @@ const BlogsPage = () => {
   if (loading) {
     return (
       <div className={styles.loading}>
-        <div className={styles.spinner}></div>
+        <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Loading" style={{ width: 200, height: 200, display: "inline-block" }} />
         <p>Loading blogs...</p>
       </div>
     )
@@ -196,3 +196,6 @@ const BlogsPage = () => {
 }
 
 export default BlogsPage
+
+
+

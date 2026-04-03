@@ -21,6 +21,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import toast from 'react-hot-toast';
 
+const ORDER_LEVEL_GIFT_WRAP_CHARGE = 69;
+
 const SingleAbandonedPage = () => {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -104,8 +106,21 @@ const SingleAbandonedPage = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           shippingInfo: formData,
-          orderItems: order.orderItems,
+          orderItems: (order.orderItems || []).map((item) => ({
+            product: item?.product?._id || item?.product,
+            quantity: item?.quantity,
+            price: item?.price,
+            color: item?.color,
+            size: item?.size,
+            isGift: Boolean(item?.isGift),
+            giftWrap: Boolean(item?.giftWrap),
+            giftWrapCharge: item?.giftWrap ? Number(item?.giftWrapCharge || ORDER_LEVEL_GIFT_WRAP_CHARGE) : 0,
+            giftMessage: item?.isGift ? String(item?.giftMessage || '') : '',
+          })),
           totalPrice: order.totalPrice,
+          giftWrapTotal: (order.orderItems || []).some((item) => Boolean(item?.giftWrap))
+            ? ORDER_LEVEL_GIFT_WRAP_CHARGE
+            : 0,
           shippingCost: order.shippingCost,
           orderType: order.orderType,
           discount: order.discount,
@@ -209,14 +224,33 @@ const SingleAbandonedPage = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           shippingInfo: formData,
-          paymentInfo: {
-            razorpayOrderId: 'COD',
-            razorpayPaymentId: 'COD',
-          },
-          orderItems: order.orderItems,
+          paymentInfo:
+            String(order?.orderType || '').toUpperCase() === 'COD'
+              ? {
+                  razorpayOrderId: 'COD',
+                  razorpayPaymentId: 'COD',
+                }
+              : order?.paymentInfo || {
+                  razorpayOrderId: 'PENDING',
+                  razorpayPaymentId: 'PENDING',
+                },
+          orderItems: (order.orderItems || []).map((item) => ({
+            product: item?.product?._id || item?.product,
+            quantity: item?.quantity,
+            price: item?.price,
+            color: item?.color,
+            size: item?.size,
+            isGift: Boolean(item?.isGift),
+            giftWrap: Boolean(item?.giftWrap),
+            giftWrapCharge: item?.giftWrap ? Number(item?.giftWrapCharge || ORDER_LEVEL_GIFT_WRAP_CHARGE) : 0,
+            giftMessage: item?.isGift ? String(item?.giftMessage || '') : '',
+          })),
           totalPrice: order.totalPrice,
+          giftWrapTotal: (order.orderItems || []).some((item) => Boolean(item?.giftWrap))
+            ? ORDER_LEVEL_GIFT_WRAP_CHARGE
+            : 0,
           shippingCost: order.shippingCost,
-          orderType: 'COD',
+          orderType: order.orderType || 'COD',
           discount: order.discount,
           finalAmount: order.finalAmount,
         }),
@@ -229,7 +263,7 @@ const SingleAbandonedPage = () => {
           name: user?.firstname,
           title: 'Order Created from Abandoned',
           sku: '',
-          productchange: `For ${formData.firstname}, Amount:${order.finalAmount}, orderType:COD Number:${order.orderNumber}, Items:${order.orderItems?.length}`,
+          productchange: `For ${formData.firstname}, Amount:${order.finalAmount}, orderType:${order.orderType || 'COD'} Number:${order.orderNumber}, Items:${order.orderItems?.length}`,
           time: new Date().toISOString(),
         });
         
@@ -290,10 +324,15 @@ const SingleAbandonedPage = () => {
     }).format(amount);
   };
 
+  const toFiniteNumber = (value) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
   if (loading) {
     return (
       <div className={styles.loading}>
-        <div className={styles.spinner}></div>
+        <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Loading" style={{ width: 200, height: 200, display: "inline-block" }} />
         <p>Loading abandoned order...</p>
       </div>
     );
@@ -312,7 +351,30 @@ const SingleAbandonedPage = () => {
     );
   }
 
-  const subtotal = order.orderItems?.reduce((sum, item) => sum + (item.quantity * item.price), 0) || 0;
+  const resolvedOrderItems = Array.isArray(order?.orderItems) ? order.orderItems : [];
+  const subtotal = resolvedOrderItems.reduce(
+    (sum, item) => sum + toFiniteNumber(item?.quantity) * toFiniteNumber(item?.price),
+    0
+  );
+  const hasGiftWrap = resolvedOrderItems.some((item) => Boolean(item?.giftWrap));
+  const derivedGiftWrapTotal = hasGiftWrap ? ORDER_LEVEL_GIFT_WRAP_CHARGE : 0;
+  const storedGiftWrapTotal = Number.isFinite(Number(order?.giftWrapTotal))
+    ? Math.max(toFiniteNumber(order?.giftWrapTotal), 0)
+    : null;
+  const giftWrapTotal = storedGiftWrapTotal && storedGiftWrapTotal > 0
+    ? storedGiftWrapTotal
+    : Math.max(derivedGiftWrapTotal, 0);
+  const shippingCost = Math.max(toFiniteNumber(order?.shippingCost), 0);
+  const discount = Math.max(toFiniteNumber(order?.discount), 0);
+  const orderType = String(order?.orderType || '').toUpperCase();
+  const inferredCodCharge = Math.max(
+    toFiniteNumber(order?.finalAmount) - (subtotal + giftWrapTotal + shippingCost - discount),
+    0
+  );
+  const codCharge = orderType === 'COD' ? inferredCodCharge : 0;
+  const finalAmount = Number.isFinite(Number(order?.finalAmount))
+    ? Math.max(toFiniteNumber(order?.finalAmount), 0)
+    : subtotal + giftWrapTotal + shippingCost + codCharge - discount;
 
   return (
     <div className={styles.detailContainer}>
@@ -356,9 +418,9 @@ const SingleAbandonedPage = () => {
             <span>{new Date(order.createdAt).toLocaleDateString()}</span>
             <span className={styles.dot}>•</span>
             <ShoppingCart size={16} />
-            <span>{order.orderItems?.length} items</span>
+            <span>{resolvedOrderItems.length} items</span>
             <span className={styles.dot}>•</span>
-            <span className={styles.totalAmount}>{formatCurrency(order.finalAmount)}</span>
+            <span className={styles.totalAmount}>{formatCurrency(finalAmount)}</span>
           </div>
         </div>
         <div className={styles.statusActions}>
@@ -403,10 +465,10 @@ const SingleAbandonedPage = () => {
           <div className={styles.card}>
             <h2 className={styles.cardTitle}>
               <ShoppingCart size={20} />
-              Order Items ({order.orderItems?.length || 0})
+              Order Items ({resolvedOrderItems.length})
             </h2>
             <div className={styles.itemsList}>
-              {order.orderItems?.map((item, index) => (
+              {resolvedOrderItems.map((item, index) => (
                 <div key={index} className={styles.detailItem}>
                   <Image
                     src={modifyCloudinaryUrl(item?.product?.images?.[0]?.url)}
@@ -417,11 +479,26 @@ const SingleAbandonedPage = () => {
                   />
                   <div className={styles.detailItemInfo}>
                     <h4>{item?.product?.title}</h4>
-                    <p className={styles.itemSku}>SKU: {item.sku}</p>
+                    <p className={styles.itemSku}>SKU: {item?.product?.sku || item?.sku || 'N/A'}</p>
                     <div className={styles.itemMeta}>
                       <span className={styles.itemPrice}>₹{item.price}</span>
                       <span className={styles.itemQty}>Qty: {item.quantity}</span>
                     </div>
+                    {(item?.giftWrap || item?.isGift) && (
+                      <div className={styles.itemGiftMeta}>
+                        {item?.giftWrap && (
+                          <span className={styles.itemGiftBadge}>
+                            Gift wrap (+₹{item?.giftWrapCharge || ORDER_LEVEL_GIFT_WRAP_CHARGE} order-level)
+                          </span>
+                        )}
+                        {item?.isGift && item?.giftMessage && (
+                          <div className={styles.itemGiftMessageCard}>
+                            <p className={styles.itemGiftHeading}>Custom Message</p>
+                            <p className={styles.itemGiftMessage}>{item.giftMessage}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className={styles.detailItemTotal}>
                     ₹{(item.price * item.quantity).toFixed(0)}
@@ -436,20 +513,32 @@ const SingleAbandonedPage = () => {
             <h2 className={styles.cardTitle}>Payment Summary</h2>
             <div className={styles.paymentSummary}>
               <div className={styles.summaryRow}>
-                <span>Subtotal ({order.orderItems?.length} items):</span>
+                <span>Subtotal ({resolvedOrderItems.length} items):</span>
                 <span>{formatCurrency(subtotal)}</span>
               </div>
               <div className={styles.summaryRow}>
                 <span>Shipping Cost:</span>
-                <span>{formatCurrency(order.shippingCost || 0)}</span>
+                <span>{shippingCost === 0 ? 'FREE' : formatCurrency(shippingCost)}</span>
               </div>
+              {giftWrapTotal > 0 && (
+                <div className={styles.summaryRow}>
+                  <span>Gift Wrap (Order Level):</span>
+                  <span>{formatCurrency(giftWrapTotal)}</span>
+                </div>
+              )}
+              {codCharge > 0 && (
+                <div className={styles.summaryRow}>
+                  <span>COD Charges:</span>
+                  <span>{formatCurrency(codCharge)}</span>
+                </div>
+              )}
               <div className={styles.summaryRow}>
                 <span>Discount:</span>
-                <span>-{formatCurrency(order.discount || 0)}</span>
+                <span>-{formatCurrency(discount)}</span>
               </div>
               <div className={styles.summaryTotal}>
                 <span>Total Amount:</span>
-                <span>{formatCurrency(order.finalAmount)}</span>
+                <span>{formatCurrency(finalAmount)}</span>
               </div>
             </div>
           </div>
@@ -578,7 +667,7 @@ const SingleAbandonedPage = () => {
                   >
                     {saving ? (
                       <>
-                        <div className={styles.spinner}></div>
+                        <lottie-player src="/Loader-cat.json" background="transparent" speed="1" loop autoplay aria-label="Saving" style={{ width: 40, height: 40, display: "inline-block" }} />
                         Saving...
                       </>
                     ) : (

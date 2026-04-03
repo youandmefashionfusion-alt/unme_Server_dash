@@ -9,6 +9,21 @@ if (typeof window === 'object') {
   htmlToDraft = require('html-to-draftjs').default;
 }
 
+const toToastMessage = (value, fallback) => {
+  if (typeof value === 'string' && value.trim()) return value;
+  if (value && typeof value === 'object') {
+    if (typeof value.message === 'string' && value.message.trim()) return value.message;
+    if (typeof value.error === 'string' && value.error.trim()) return value.error;
+    if (value.code === 11000 && value.keyValue) {
+      const duplicateField = Object.keys(value.keyValue || {})[0];
+      if (duplicateField) {
+        return `Duplicate ${duplicateField}. Please use a unique value.`;
+      }
+    }
+  }
+  return fallback;
+};
+
 export const useProductForm = (productId, isNew = false) => {
   const { user } = useSelector((state) => state.auth);
   const [loading, setLoading] = useState(false);
@@ -358,7 +373,9 @@ export const useProductForm = (productId, isNew = false) => {
         toast.success(`Product ${isNew ? 'created' : 'updated'} successfully`);
         return true;
       } else {
-        toast.error(data.message || `Failed to ${isNew ? 'create' : 'update'} product`);
+        toast.error(
+          toToastMessage(data?.message || data?.error, `Failed to ${isNew ? 'create' : 'update'} product`)
+        );
         return false;
       }
     } catch (error) {
@@ -403,7 +420,7 @@ export const useProductForm = (productId, isNew = false) => {
         toast.success('Product deleted successfully');
         return true;
       } else {
-        toast.error(data.message || 'Failed to delete product');
+        toast.error(toToastMessage(data?.message || data?.error, 'Failed to delete product'));
         return false;
       }
     } catch (error) {
@@ -454,7 +471,7 @@ export const useProductForm = (productId, isNew = false) => {
         toast.success('Product duplicated successfully');
         return true;
       } else {
-        toast.error(data.message || 'Failed to duplicate product');
+        toast.error(toToastMessage(data?.message || data?.error, 'Failed to duplicate product'));
         return false;
       }
     } catch (error) {
