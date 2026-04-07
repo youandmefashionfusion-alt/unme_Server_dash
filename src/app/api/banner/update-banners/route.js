@@ -2,6 +2,19 @@ import connectDb from "../../../../../config/connectDb"
 import authMiddleware from "../../../../../controller/authController"
 import ScrollModel from "../../../../../models/bannersModel"
 
+const getLatestBannerDoc = async () =>
+    ScrollModel.findOne().sort({ createdAt: -1, _id: -1 })
+
+const sanitizeBannerArray = (banners = []) =>
+    Array.isArray(banners)
+        ? banners.map((banner = {}) => ({
+            url: String(banner?.url || "").trim(),
+            title: String(banner?.title || "").trim(),
+            subtitle: String(banner?.subtitle || "").trim(),
+            link: String(banner?.link || "").trim(),
+        }))
+        : []
+
 export async function PUT(request) {
     const { searchParams } = new URL(request.url)
     const body = await request.json()
@@ -12,24 +25,25 @@ export async function PUT(request) {
         await connectDb()
         await authMiddleware(token)
 
-        // Find the existing scroll document (assuming only one document exists)
-        let scrollDoc = await ScrollModel.findOne()
+        const payload = {
+            desktopBanners: sanitizeBannerArray(desktopBanners),
+            mobileBanners: sanitizeBannerArray(mobileBanners),
+            otherBanners: sanitizeBannerArray(otherBanners),
+            budgetBanners: sanitizeBannerArray(budgetBanners),
+        }
+
+        // Always update the latest banner document so reads/writes stay in sync.
+        let scrollDoc = await getLatestBannerDoc()
 
         // If no document exists, create one
         if (!scrollDoc) {
-            scrollDoc = new ScrollModel({
-                desktopBanners: [],
-                mobileBanners: [],
-                otherBanners: [],
-                budgetBanners: []
-            })
+            scrollDoc = new ScrollModel(payload)
+        } else {
+            scrollDoc.desktopBanners = payload.desktopBanners
+            scrollDoc.mobileBanners = payload.mobileBanners
+            scrollDoc.otherBanners = payload.otherBanners
+            scrollDoc.budgetBanners = payload.budgetBanners
         }
-
-        // Update each array with new banners
-        scrollDoc.desktopBanners = desktopBanners
-        scrollDoc.mobileBanners = mobileBanners
-        scrollDoc.otherBanners = otherBanners
-        scrollDoc.budgetBanners = budgetBanners
 
         // Save the document
         await scrollDoc.save()
@@ -53,7 +67,7 @@ export async function GET(request) {
     try {
         await connectDb()
         // Find the scroll document (there should be only one)
-        const scrollDoc = await ScrollModel.findOne()
+        const scrollDoc = await getLatestBannerDoc()
 
         // If no document exists, return empty arrays
         if (!scrollDoc) {
@@ -97,8 +111,8 @@ export async function DELETE(request) {
             )
         }
 
-        // Find the scroll document
-        const scrollDoc = await ScrollModel.findOne()
+        // Find the latest scroll document
+        const scrollDoc = await getLatestBannerDoc()
         if (!scrollDoc) {
             return Response.json(
                 { success: false, message: "No banners found" },

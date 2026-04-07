@@ -3,17 +3,18 @@ import authMiddleware from "../../../../../controller/authController"
 import ScrollModel from "../../../../../models/bannersModel"
 export async function POST(req){
     const {searchParams}=new URL(req.url)
-    const token=searchParams.get("token")
+    const token=searchParams.get("token") || ""
     const body=await req.json()
     try{
         await connectDb()
         await authMiddleware(token)
         const scroll=await ScrollModel.create(body)
-        if(scroll && scroll1){
-            return Response.json(scroll)
+        if(scroll){
+            return Response.json({ success: true, data: scroll }, { status: 201 })
         }
+        return Response.json({ success: false, message: "Unable to create banner document" }, { status: 500 })
 
     }catch(error){
-        return Response.json({success:false,message:error},{status:500})
+        return Response.json({success:false,message:error?.message || "Failed to create banners"},{status:500})
     }
 }

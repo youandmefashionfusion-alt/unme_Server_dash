@@ -27,6 +27,14 @@ const Banners = () => {
     link: ""
   }), []);
 
+  const normalizeBanner = useCallback((banner = {}) => ({
+    id: banner?._id || banner?.id || `banner-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+    url: String(banner?.url || ""),
+    title: String(banner?.title || ""),
+    subtitle: String(banner?.subtitle || ""),
+    link: String(banner?.link || "")
+  }), []);
+
   const getPreviewImageUrl = useCallback((url) => {
     if (!url) return "";
     const cloudfront = process.env.NEXT_PUBLIC_CLOUDFRONT_URL || 'https://d2gtpgxs0y565n.cloudfront.net';
@@ -60,21 +68,27 @@ const Banners = () => {
         }
 
         const data = await response.json();
-        // Transform the data to match our state structure
-        setBanners({
-          desktop: data[0].desktopBanners || [],
-          mobile: data[0].mobileBanners || [],
-          other: data[0].otherBanners || [],
-          budget: data[0].budgetBanners || []
-        });
+        const latestDoc = Array.isArray(data) ? data[0] : data;
+        const nextBanners = {
+          desktop: Array.isArray(latestDoc?.desktopBanners)
+            ? latestDoc.desktopBanners.map(normalizeBanner)
+            : [],
+          mobile: Array.isArray(latestDoc?.mobileBanners)
+            ? latestDoc.mobileBanners.map(normalizeBanner)
+            : [],
+          other: Array.isArray(latestDoc?.otherBanners)
+            ? latestDoc.otherBanners.map(normalizeBanner)
+            : [],
+          budget: Array.isArray(latestDoc?.budgetBanners)
+            ? latestDoc.budgetBanners.map(normalizeBanner)
+            : []
+        };
 
-        // If no banners in active tab, add one
-        if (data[`${activeTab}Banners`]?.length === 0) {
-          setBanners(prev => ({
-            ...prev,
-            [activeTab]: [createEmptyBanner()]
-          }));
+        if (nextBanners[activeTab].length === 0) {
+          nextBanners[activeTab] = [createEmptyBanner()];
         }
+
+        setBanners(nextBanners);
       } catch (error) {
         console.error("Error fetching banners:", error.message);
         setBanners({
@@ -89,7 +103,7 @@ const Banners = () => {
     };
 
     fetchBanners();
-  }, [createEmptyBanner, activeTab]);
+  }, [createEmptyBanner, activeTab, normalizeBanner]);
 
   const handleImageUpload = useCallback(async (file, index) => {
     if (!file) return;

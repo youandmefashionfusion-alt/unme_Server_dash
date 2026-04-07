@@ -12,10 +12,23 @@ export const config = {
   maxDuration: 10,
 };
 
+const BRAND_OWNER_EMAIL = "unmejewels@gmail.com";
+const EXTERNAL_CALL_TIMEOUT_MS = 10000;
+
 const toFiniteNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 };
+
+const escapeHtml = (value) =>
+  String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+
+const formatInr = (value) => Number(value || 0).toLocaleString("en-IN");
 
 const sanitizeGiftMessage = (message) => String(message || "").trim().slice(0, 180);
 
@@ -35,30 +48,261 @@ const sanitizeOrderItems = (items) => {
       const productId = getProductId(item?.product);
       const giftWrap = Boolean(item?.giftWrap);
       const isGift = Boolean(item?.isGift);
-      const giftWrapCharge = giftWrap
-        ? Math.max(
-            toFiniteNumber(item?.giftWrapCharge) || CHECKOUT_STANDARD_GIFT_WRAP_CHARGE,
-            0
-          )
-        : 0;
 
       return {
-        ...item,
         product: productId,
         quantity,
         isGift,
         giftWrap,
-        giftWrapCharge,
+        giftWrapCharge: giftWrap ? CHECKOUT_STANDARD_GIFT_WRAP_CHARGE : 0,
         giftMessage: isGift ? sanitizeGiftMessage(item?.giftMessage) : "",
       };
     })
     .filter((item) => Boolean(item.product) && item.quantity > 0);
 };
 
-const getGiftWrapTotalFromItems = (items) => {
+const calculateGiftWrapTotal = (items) => {
   if (!Array.isArray(items)) return 0;
-  const hasGiftWrap = items.some((item) => Boolean(item?.giftWrap));
-  return hasGiftWrap ? CHECKOUT_STANDARD_GIFT_WRAP_CHARGE : 0;
+  return items.some((item) => item?.giftWrap) ? CHECKOUT_STANDARD_GIFT_WRAP_CHARGE : 0;
+};
+
+const sanitizeShippingInfo = (shippingInfo = {}) => {
+  const rawPhone = String(shippingInfo?.phone ?? "").trim();
+  const phoneDigits = rawPhone.replace(/\D/g, "");
+  const numericPhone = phoneDigits ? Number(phoneDigits) : toFiniteNumber(rawPhone);
+
+  const rawPincode = String(shippingInfo?.pincode ?? "").trim();
+  const pincodeDigits = rawPincode.replace(/\D/g, "");
+  const numericPincode = pincodeDigits ? Number(pincodeDigits) : toFiniteNumber(rawPincode);
+
+  return {
+    firstname: String(shippingInfo?.firstname || "").trim(),
+    lastname: String(shippingInfo?.lastname || "").trim(),
+    email: String(shippingInfo?.email || "").trim(),
+    phone: numericPhone,
+    address: String(shippingInfo?.address || "").trim(),
+    city: String(shippingInfo?.city || "").trim(),
+    state: String(shippingInfo?.state || "").trim(),
+    pincode: numericPincode,
+  };
+};
+
+const hasValidShippingInfo = (shippingInfo = {}) =>
+  Boolean(
+    shippingInfo.firstname &&
+      shippingInfo.lastname &&
+      shippingInfo.email &&
+      Number(shippingInfo.phone) > 0 &&
+      shippingInfo.address &&
+      shippingInfo.city &&
+      shippingInfo.state &&
+      Number(shippingInfo.pincode) > 0
+  );
+
+const formatOrderItemLine = (item) => {
+  const giftMessageSuffix =
+    item?.isGift && item?.giftMessage ? ` (Gift message: ${item.giftMessage})` : "";
+
+  return `- ${item?.product?.title || "Product"} - Rs${Number(
+    item?.product?.price || 0
+  ).toLocaleString("en-IN")} x ${item?.quantity || 0}${giftMessageSuffix}`;
+};
+
+const orderConfirmationEmail = ({
+  orderNumber,
+  shippingInfo,
+  orderItems,
+  totalPrice,
+  finalAmount,
+  shippingCost,
+  discount,
+  giftWrapTotal,
+  codCharge,
+}) => {
+  const itemsHtml = (orderItems || [])
+    .map((item) => {
+      const giftMessage =
+        item?.isGift && item?.giftMessage
+          ? `<div style="color:#7A7067;font-size:12px;margin-top:4px;">Gift message: ${escapeHtml(
+              item.giftMessage
+            )}</div>`
+          : "";
+
+      return `<li style="margin-bottom:8px;">${escapeHtml(
+        item?.product?.title || "Product"
+      )} - Qty ${Number(item?.quantity || 0)} - Rs${formatInr(
+        item?.product?.price || 0
+      )}${giftMessage}</li>`;
+    })
+    .join("");
+
+  return `
+    <div style="font-family:Arial,sans-serif;color:#1A1612;">
+      <h2>Order Confirmed - #${escapeHtml(orderNumber)}</h2>
+      <p>Hi ${escapeHtml(shippingInfo?.firstname || "Customer")}, your order is confirmed.</p>
+      <ul style="padding-left:18px;">${itemsHtml}</ul>
+      <p>Subtotal: Rs${formatInr(totalPrice)}</p>
+      ${giftWrapTotal > 0 ? `<p>Gift Wrap: Rs${formatInr(giftWrapTotal)}</p>` : ""}
+      <p>Shipping: ${Number(shippingCost || 0) === 0 ? "FREE" : `Rs${formatInr(shippingCost)}`}</p>
+      ${codCharge > 0 ? `<p>COD Charges: Rs${formatInr(codCharge)}</p>` : ""}
+      ${discount > 0 ? `<p>Discount: -Rs${formatInr(discount)}</p>` : ""}
+      <p><strong>Total: Rs${formatInr(finalAmount)}</strong></p>
+    </div>
+  `;
+};
+
+const orderDispatchedEmail = ({ orderNumber, firstname, orderItems, finalAmount }) => {
+  const itemsHtml = (orderItems || [])
+    .map(
+      (item) =>
+        `<li>${escapeHtml(item?.product?.title || "Product")} - Qty ${Number(
+          item?.quantity || 0
+        )}</li>`
+    )
+    .join("");
+
+  return `
+    <div style="font-family:Arial,sans-serif;color:#1A1612;">
+      <h2>Your Order Is On The Way - #${escapeHtml(orderNumber)}</h2>
+      <p>Hi ${escapeHtml(firstname || "Customer")}, your order has been dispatched.</p>
+      <ul style="padding-left:18px;">${itemsHtml}</ul>
+      <p><strong>Final Amount: Rs${formatInr(finalAmount)}</strong></p>
+    </div>
+  `;
+};
+
+const buildOwnerOrderEmailHtml = ({
+  orderNumber,
+  shippingInfo,
+  orderItems,
+  finalAmount,
+  totalPrice,
+  shippingCost,
+  discount,
+  giftWrapTotal,
+  codCharge,
+  orderType,
+}) => {
+  const itemsHtml = (orderItems || [])
+    .map((item) => {
+      const giftMeta =
+        item?.isGift && item?.giftMessage
+          ? `<div style="color:#7A7067;font-size:12px;margin-top:4px;">Gift message: ${escapeHtml(
+              item.giftMessage
+            )}</div>`
+          : "";
+
+      return `
+        <tr>
+          <td style="padding:8px 0;border-bottom:1px solid #E6E0D6;">
+            <div style="font-size:14px;color:#1A1612;font-weight:600;">${escapeHtml(
+              item?.product?.title || "Product"
+            )}</div>
+            <div style="font-size:13px;color:#4A4540;">Qty: ${Number(
+              item?.quantity || 0
+            )} | Price: Rs${formatInr(item?.product?.price || 0)}</div>
+            ${giftMeta}
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>New Order Received</title>
+</head>
+<body style="margin:0;padding:20px;background:#FAF8F4;font-family:Arial,sans-serif;color:#1A1612;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:680px;margin:0 auto;background:#FFFFFF;border:1px solid #E6E0D6;">
+    <tr>
+      <td style="padding:20px;border-bottom:1px solid #E6E0D6;">
+        <h2 style="margin:0;font-size:22px;">New Order Received</h2>
+        <p style="margin:8px 0 0;color:#7A7067;">Order #${escapeHtml(orderNumber)}</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:20px;">
+        <h3 style="margin:0 0 10px;font-size:16px;">Customer Details</h3>
+        <p style="margin:4px 0;">Name: ${escapeHtml(shippingInfo?.firstname || "")} ${escapeHtml(
+    shippingInfo?.lastname || ""
+  )}</p>
+        <p style="margin:4px 0;">Email: ${escapeHtml(shippingInfo?.email || "-")}</p>
+        <p style="margin:4px 0;">Phone: ${escapeHtml(shippingInfo?.phone || "-")}</p>
+        <p style="margin:4px 0;">Address: ${escapeHtml(shippingInfo?.address || "-")}, ${escapeHtml(
+    shippingInfo?.city || "-"
+  )}, ${escapeHtml(shippingInfo?.state || "-")} - ${escapeHtml(shippingInfo?.pincode || "-")}</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:0 20px 20px;">
+        <h3 style="margin:0 0 10px;font-size:16px;">Order Items</h3>
+        <table width="100%" cellpadding="0" cellspacing="0">
+          ${itemsHtml}
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:0 20px 20px;">
+        <h3 style="margin:0 0 10px;font-size:16px;">Payment Summary</h3>
+        <p style="margin:4px 0;">Order Type: ${escapeHtml(orderType || "-")}</p>
+        <p style="margin:4px 0;">Subtotal: Rs${formatInr(totalPrice)}</p>
+        ${giftWrapTotal > 0 ? `<p style="margin:4px 0;">Gift Wrap: Rs${formatInr(giftWrapTotal)}</p>` : ""}
+        <p style="margin:4px 0;">Shipping: ${
+          Number(shippingCost || 0) === 0 ? "FREE" : `Rs${formatInr(shippingCost)}`
+        }</p>
+        ${codCharge > 0 ? `<p style="margin:4px 0;">COD Charges: Rs${formatInr(codCharge)}</p>` : ""}
+        ${discount > 0 ? `<p style="margin:4px 0;">Discount: -Rs${formatInr(discount)}</p>` : ""}
+        <p style="margin:8px 0 0;font-weight:700;font-size:16px;">Final Amount: Rs${formatInr(
+          finalAmount
+        )}</p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
+};
+
+const safeFetch = async (url, options = {}, label = "external-call") => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), EXTERNAL_CALL_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      console.error(
+        `[create-order] ${label} failed: ${response.status} ${response.statusText}${
+          body ? ` | ${body}` : ""
+        }`
+      );
+    }
+  } catch (error) {
+    console.error(`[create-order] ${label} failed: ${error.message}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+const safeSendEmail = async (payload, label = "email") => {
+  try {
+    const result = await sendEmail(payload);
+    if (!result?.success) {
+      console.error(
+        `[create-order] ${label} failed: ${result?.error || "sendEmail returned unsuccessful response"}`
+      );
+    }
+  } catch (error) {
+    console.error(`[create-order] ${label} failed: ${error.message}`);
+  }
 };
 
 const processOrder = async (orderItems) => {
@@ -67,176 +311,96 @@ const processOrder = async (orderItems) => {
       const productId = getProductId(orderItem?.product);
       const quantity = Math.max(toFiniteNumber(orderItem?.quantity), 0);
 
-      if (!productId || quantity <= 0) {
-        continue;
-      }
+      if (!productId || quantity <= 0) continue;
 
       const foundProduct = await ProductModel.findById(productId);
       if (!foundProduct) {
         throw new Error(`Product with ID ${productId} not found`);
       }
 
-      if (foundProduct.quantity >= quantity) {
-        foundProduct.quantity -= quantity;
-        foundProduct.sold += quantity;
-        await foundProduct.save();
-      } else {
-        throw new Error(`Not enough quantity available`);
+      if (foundProduct.quantity < quantity) {
+        throw new Error("Not enough quantity available");
       }
+
+      foundProduct.quantity -= quantity;
+      foundProduct.sold += quantity;
+      await foundProduct.save();
     }
-    console.log("Inventory updated successfully");
   } catch (error) {
     console.error("Error updating inventory:", error.message);
   }
 };
 
-// Function to send email after 3 hours using the new "Order Dispatched" template
 const msgAfter3hour = async (firstname, ordernumber, email, orderItems, finalAmount) => {
-  // Generate order items string for the email
-  const orderItemsString = orderItems?.map((item) => {
-    return `• ${item.product.title} - ₹${item.product.price} x ${item.quantity}`;
-  }).join('<br>');
-
-  await sendEmail({
-    to: email,
-    subject: "Your Order is on the Way! - You & Me Jewelry",
-    text: `Your order #${ordernumber} has been dispatched and is on its way to you.`,
-    htmlContent: `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Your Order is on the Way</title>
-</head>
-<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f8f9fa;">
-    <div style="background: #f8f9fa; padding: 40px 20px;">
-        <table width="100%" border="0" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-            <!-- Header -->
-            <tr>
-                <td style="background: linear-gradient(135deg, #d4af37 0%, #c49f31 100%); padding: 40px 30px; text-align: center;">
-                    <h1 style="color: white; margin: 0 0 10px; font-size: 32px; letter-spacing: 2px; font-family: Arial, sans-serif;">YOU & ME</h1>
-                    <p style="color: rgba(255,255,255,0.9); margin: 0; font-size: 14px; letter-spacing: 1px; font-family: Arial, sans-serif;">FINE JEWELRY</p>
-                </td>
-            </tr>
-            
-            <!-- Content -->
-            <tr>
-                <td style="padding: 40px 30px;">
-                    <div style="text-align: center; margin-bottom: 30px;">
-                        <div style="width: 80px; height: 80px; background: #dbeafe; border-radius: 50%; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
-                            <span style="font-size: 40px;">📦</span>
-                        </div>
-                        <h2 style="color: #1a1a1a; margin: 0 0 10px; font-size: 28px; font-family: Arial, sans-serif;">Your Order is on the Way!</h2>
-                        <p style="color: #666; margin: 0; font-size: 16px; font-family: Arial, sans-serif;">Order #${ordernumber} has been dispatched</p>
-                    </div>
-                    
-                    <!-- Order Items Summary -->
-                    <div style="background: #f8f9fa; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
-                        <h3 style="color: #333; margin: 0 0 15px; font-size: 16px; font-family: Arial, sans-serif;">Your Order Items</h3>
-                        <div style="color: #666; font-size: 14px; line-height: 1.6; font-family: Arial, sans-serif;">
-                            ${orderItemsString}
-                        </div>
-                        <div style="border-top: 1px solid #ddd; margin-top: 15px; padding-top: 15px;">
-                            <p style="color: #333; margin: 0; font-size: 16px; font-weight: bold; font-family: Arial, sans-serif;">
-                                Total Amount: <span style="color: #d4af37;">₹${finalAmount}</span>
-                            </p>
-                        </div>
-                    </div>
-                    
-                    <!-- Tracking Info -->
-                    <div style="background: #f8f9fa; border-radius: 8px; padding: 25px; margin-bottom: 30px; text-align: center;">
-                        <p style="color: #666; margin: 0 0 15px; font-size: 14px; font-family: Arial, sans-serif;">Tracking Number</p>
-                        <p style="color: #333; margin: 0 0 20px; font-size: 20px; font-weight: bold; letter-spacing: 1px; font-family: Arial, sans-serif;">TR${ordernumber}IN</p>
-                        <p style="color: #666; margin: 0 0 5px; font-size: 14px; font-family: Arial, sans-serif;">Estimated Delivery</p>
-                        <p style="color: #d4af37; margin: 0; font-size: 18px; font-weight: bold; font-family: Arial, sans-serif;">Within 3-5 Business Days</p>
-                    </div>
-                    
-                    <!-- Progress Timeline -->
-                    <div style="margin-bottom: 30px;">
-                        <table width="100%" border="0" cellpadding="0" cellspacing="0">
-                            <tr>
-                                <td style="width: 33.33%; text-align: center; padding: 10px;">
-                                    <div style="width: 40px; height: 40px; background: #10b981; border-radius: 50%; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">✓</div>
-                                    <p style="margin: 0; font-size: 12px; color: #333; font-family: Arial, sans-serif;">Confirmed</p>
-                                </td>
-                                <td style="width: 33.33%; text-align: center; padding: 10px;">
-                                    <div style="width: 40px; height: 40px; background: #3b82f6; border-radius: 50%; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">→</div>
-                                    <p style="margin: 0; font-size: 12px; color: #333; font-weight: bold; font-family: Arial, sans-serif;">In Transit</p>
-                                </td>
-                                <td style="width: 33.33%; text-align: center; padding: 10px;">
-                                    <div style="width: 40px; height: 40px; background: #e5e7eb; border-radius: 50%; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; color: #999; font-weight: bold;">📍</div>
-                                    <p style="margin: 0; font-size: 12px; color: #999; font-family: Arial, sans-serif;">Delivered</p>
-                                </td>
-                            </tr>
-                        </table>
-                    </div>
-                    
-                    <div style="text-align: center;">
-                        <a href="#" style="display: inline-block; background: linear-gradient(135deg, #d4af37, #c49f31); color: white; padding: 15px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; font-family: Arial, sans-serif;">Track Package</a>
-                    </div>
-                </td>
-            </tr>
-            
-            <!-- Footer -->
-            <tr>
-                <td style="background: #1a1a1a; padding: 30px; text-align: center;">
-                    <p style="color: #999; margin: 0 0 15px; font-size: 14px; font-family: Arial, sans-serif;">Questions? Contact us at support@youandme.com</p>
-                    <p style="color: #666; margin: 0; font-size: 12px; font-family: Arial, sans-serif;">© 2024 You & Me Jewelry. All rights reserved.</p>
-                </td>
-            </tr>
-        </table>
-    </div>
-</body>
-</html>
-    `
-  });
+  await safeSendEmail(
+    {
+      to: email,
+      subject: "Your Order is on the Way! - U n Me Jewelry",
+      text: `Your order #${ordernumber} has been dispatched and is on its way to you.`,
+      htmlContent: orderDispatchedEmail({
+        orderNumber: ordernumber,
+        firstname,
+        orderItems,
+        finalAmount,
+      }),
+    },
+    "email-customer-order-dispatched"
+  );
 };
 
-const validateOrderPricesAndAmounts = async (orderItems, totalPrice, finalAmount, discount, shippingCost) => {
-  try {
-    let calculatedTotalPrice = 0;
+const validateOrderPricesAndAmounts = async (
+  orderItems,
+  totalPrice,
+  finalAmount,
+  discount,
+  shippingCost,
+  giftWrapTotal,
+  codCharge
+) => {
+  let calculatedTotalPrice = 0;
 
-    for (const orderItem of orderItems) {
-      const productId = getProductId(orderItem?.product);
-      const quantity = Math.max(toFiniteNumber(orderItem?.quantity), 0);
+  for (const orderItem of orderItems) {
+    const productId = getProductId(orderItem?.product);
+    const quantity = Math.max(toFiniteNumber(orderItem?.quantity), 0);
+    const foundProduct = await ProductModel.findById(productId);
 
-      const foundProduct = await ProductModel.findById(productId);
-
-      if (!foundProduct) {
-        throw new Error(`Product with ID ${productId} not found`);
-      }
-
-      calculatedTotalPrice += foundProduct.price * quantity;
-
-      if (foundProduct.quantity < quantity) {
-        throw new Error(`Not enough quantity available`);
-      }
+    if (!foundProduct) {
+      throw new Error(`Product with ID ${productId} not found`);
     }
 
-    if (calculatedTotalPrice !== totalPrice) {
-      throw new Error(
-        `Total price mismatch. Expected: ₹${calculatedTotalPrice}, Received: ₹${totalPrice}`
-      );
+    calculatedTotalPrice += foundProduct.price * quantity;
+
+    if (foundProduct.quantity < quantity) {
+      throw new Error("Not enough quantity available");
     }
+  }
 
-    const expectedFinalAmount = calculatedTotalPrice - discount + shippingCost;
+  if (calculatedTotalPrice !== totalPrice) {
+    throw new Error(
+      `Total price mismatch. Expected: Rs${calculatedTotalPrice}, Received: Rs${totalPrice}`
+    );
+  }
 
-    if (expectedFinalAmount !== finalAmount) {
-      throw new Error(
-        `Final amount mismatch. Expected: ₹${expectedFinalAmount}, Received: ₹${finalAmount}`
-      );
-    }
+  const expectedFinalAmount =
+    calculatedTotalPrice + giftWrapTotal + shippingCost + codCharge - discount;
 
-    console.log("All prices and amounts validated successfully");
-  } catch (error) {
-    throw new Error(error.message);
+  if (expectedFinalAmount !== finalAmount) {
+    throw new Error(
+      `Final amount mismatch. Expected: Rs${expectedFinalAmount}, Received: Rs${finalAmount}`
+    );
   }
 };
 
-export async function POST(req,res){
-  const body = await req.text();
-  const parsedBody = JSON.parse(body);
+export async function POST(req) {
+  let parsedBody = {};
+  try {
+    parsedBody = await req.json();
+  } catch {
+    return Response.json(
+      { success: false, error: "Invalid request body" },
+      { status: 400 }
+    );
+  }
 
   const {
     shippingInfo,
@@ -248,68 +412,82 @@ export async function POST(req,res){
     orderType,
     discount,
     paymentInfo,
-    isPartial,
     tag,
-  } = parsedBody;
-  
-  try {
-    await connectDb()
+    isPartial,
+  } = parsedBody || {};
 
-    const normalizedOrderItems = sanitizeOrderItems(orderItems);
-    if (!normalizedOrderItems.length) {
-      return Response.json(
-        { success: false, error: "Order must include at least one valid item" },
-        { status: 400 }
-      );
-    }
+  const sanitizedOrderItems = sanitizeOrderItems(orderItems);
+  const normalizedShippingInfo = sanitizeShippingInfo(shippingInfo);
 
-    const normalizedTotalPrice = Math.max(toFiniteNumber(totalPrice), 0);
-    const normalizedShippingCost = Math.max(toFiniteNumber(shippingCost), 0);
-    const normalizedDiscount = Math.max(toFiniteNumber(discount), 0);
-    const normalizedOrderType =
-      String(orderType || "").toUpperCase() === "COD" ? "COD" : "Prepaid";
-    const normalizedGiftWrapTotal = getGiftWrapTotalFromItems(normalizedOrderItems);
-    const requestedCodCharge = Math.max(toFiniteNumber(codCharge), 0);
-    const inferredCodCharge = Math.max(
-      toFiniteNumber(finalAmount) -
-        (normalizedTotalPrice +
-          normalizedGiftWrapTotal +
-          normalizedShippingCost -
-          normalizedDiscount),
-      0
+  if (!sanitizedOrderItems.length) {
+    return Response.json(
+      { success: false, error: "Order must include at least one valid item" },
+      { status: 400 }
     );
-    const normalizedCodCharge =
-      normalizedOrderType === "COD"
-        ? requestedCodCharge > 0
-          ? requestedCodCharge
-          : inferredCodCharge > 0
-            ? inferredCodCharge
-            : CHECKOUT_STANDARD_COD_CHARGE
-        : 0;
-    const normalizedPaymentInfo = {
-      razorpayOrderId:
-        String(paymentInfo?.razorpayOrderId || "").trim() ||
-        (normalizedOrderType === "COD" ? "COD" : "MANUAL"),
-      razorpayPaymentId:
-        String(paymentInfo?.razorpayPaymentId || "").trim() ||
-        (normalizedOrderType === "COD" ? "COD" : "MANUAL"),
-      ...(paymentInfo?.paymentId
-        ? { paymentId: String(paymentInfo.paymentId) }
-        : {}),
-    };
-    const resolvedFinalAmount =
-      normalizedTotalPrice +
-      normalizedGiftWrapTotal +
-      normalizedShippingCost +
-      normalizedCodCharge -
-      normalizedDiscount;
+  }
 
-    // await validateOrderPricesAndAmounts(orderItems, totalPrice, finalAmount, discount, shippingCost);
+  if (!hasValidShippingInfo(normalizedShippingInfo)) {
+    return Response.json(
+      { success: false, error: "Invalid shipping info" },
+      { status: 400 }
+    );
+  }
 
-    for (const orderItem of normalizedOrderItems) {
+  const normalizedTotalPrice = Math.max(toFiniteNumber(totalPrice), 0);
+  const normalizedShippingCost = Math.max(toFiniteNumber(shippingCost), 0);
+  const normalizedDiscount = Math.max(toFiniteNumber(discount), 0);
+  const normalizedOrderType =
+    String(orderType || "").toUpperCase() === "COD" ? "COD" : "Prepaid";
+  const normalizedGiftWrapTotal = calculateGiftWrapTotal(sanitizedOrderItems);
+  const requestedCodCharge = Math.max(toFiniteNumber(codCharge), 0);
+  const inferredCodCharge = Math.max(
+    toFiniteNumber(finalAmount) -
+      (normalizedTotalPrice + normalizedGiftWrapTotal + normalizedShippingCost - normalizedDiscount),
+    0
+  );
+  const normalizedCodCharge =
+    normalizedOrderType === "COD"
+      ? requestedCodCharge > 0
+        ? requestedCodCharge
+        : inferredCodCharge > 0
+          ? inferredCodCharge
+          : CHECKOUT_STANDARD_COD_CHARGE
+      : 0;
+  const normalizedPaymentInfo = {
+    razorpayOrderId:
+      String(paymentInfo?.razorpayOrderId || "").trim() ||
+      (normalizedOrderType === "COD" ? "COD" : "MANUAL"),
+    razorpayPaymentId:
+      String(paymentInfo?.razorpayPaymentId || "").trim() ||
+      (normalizedOrderType === "COD" ? "COD" : "MANUAL"),
+    ...(paymentInfo?.paymentId
+      ? { paymentId: String(paymentInfo.paymentId).trim() }
+      : {}),
+  };
+  const resolvedFinalAmount =
+    normalizedTotalPrice +
+    normalizedGiftWrapTotal +
+    normalizedShippingCost +
+    normalizedCodCharge -
+    normalizedDiscount;
+
+  try {
+    await connectDb();
+
+    // Keep parity with website route: validations can be re-enabled whenever needed.
+    // await validateOrderPricesAndAmounts(
+    //   sanitizedOrderItems,
+    //   normalizedTotalPrice,
+    //   resolvedFinalAmount,
+    //   normalizedDiscount,
+    //   normalizedShippingCost,
+    //   normalizedGiftWrapTotal,
+    //   normalizedCodCharge
+    // );
+
+    for (const orderItem of sanitizedOrderItems) {
       const productId = getProductId(orderItem?.product);
       const quantity = Math.max(toFiniteNumber(orderItem?.quantity), 0);
-
       const foundProduct = await ProductModel.findById(productId);
 
       if (!foundProduct) {
@@ -317,185 +495,211 @@ export async function POST(req,res){
       }
 
       if (foundProduct.quantity < quantity) {
-        throw new Error(`Not enough quantity available`);
+        throw new Error("Not enough quantity available");
       }
     }
 
-    // Create the order
     const order = await OrderModel.create({
-      shippingInfo,
-      orderItems: normalizedOrderItems,
+      shippingInfo: normalizedShippingInfo,
+      orderItems: sanitizedOrderItems,
       totalPrice: normalizedTotalPrice,
+      giftWrapTotal: normalizedGiftWrapTotal,
       finalAmount: resolvedFinalAmount,
       shippingCost: normalizedShippingCost,
-      giftWrapTotal: normalizedGiftWrapTotal,
       codCharge: normalizedCodCharge,
       orderType: normalizedOrderType,
       discount: normalizedDiscount,
       paymentInfo: normalizedPaymentInfo,
       tag,
-      isPartial
-    });
-    
-    const order1 = await OrderModel.findById(order._id).populate("orderItems.product")
-    
-    // Generate order items string for confirmation email
-    const orderItemsString = order1?.orderItems.map((item) => {
-        return `• ${item.product.title} - ₹${item.product.price} x ${item.quantity}`;
-    }).join('<br>');
-
-    // Send confirmation email using the new template
-    await sendEmail({
-      to: `${shippingInfo.email}`,
-      subject: "Order Confirmed! - You & Me Jewelry",
-      text: `Your order #${order.orderNumber} has been confirmed. Thank you for your purchase!`,
-      htmlContent: `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Order Confirmed - You & Me Jewelry</title>
-</head>
-<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f8f9fa;">
-    <div style="background: #f8f9fa; padding: 40px 20px;">
-        <table width="100%" border="0" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-            <!-- Header -->
-            <tr>
-                <td style="background: linear-gradient(135deg, #d4af37 0%, #c49f31 100%); padding: 40px 30px; text-align: center;">
-                    <h1 style="color: white; margin: 0 0 10px; font-size: 32px; letter-spacing: 2px; font-family: Arial, sans-serif;">YOU & ME</h1>
-                    <p style="color: rgba(255,255,255,0.9); margin: 0; font-size: 14px; letter-spacing: 1px; font-family: Arial, sans-serif;">FINE JEWELRY</p>
-                </td>
-            </tr>
-            
-            <!-- Content -->
-            <tr>
-                <td style="padding: 40px 30px;">
-                    <div style="text-align: center; margin-bottom: 30px;">
-                        <div style="width: 80px; height: 80px; background: #dcfce7; border-radius: 50%; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
-                            <span style="font-size: 40px;">✓</span>
-                        </div>
-                        <h2 style="color: #1a1a1a; margin: 0 0 10px; font-size: 28px; font-family: Arial, sans-serif;">Order Confirmed!</h2>
-                        <p style="color: #666; margin: 0; font-size: 16px; font-family: Arial, sans-serif;">Thank you for your purchase</p>
-                    </div>
-                    
-                    <!-- Order Details -->
-                    <div style="background: #f8f9fa; border-radius: 8px; padding: 20px; margin-bottom: 30px;">
-                        <table width="100%" border="0" cellpadding="0" cellspacing="0">
-                            <tr>
-                                <td style="padding: 10px 0;">
-                                    <strong style="color: #333; font-family: Arial, sans-serif;">Order Number:</strong><br>
-                                    <span style="color: #d4af37; font-size: 18px; font-weight: bold; font-family: Arial, sans-serif;">#${order.orderNumber}</span>
-                                </td>
-                                <td style="padding: 10px 0; text-align: right;">
-                                    <strong style="color: #333; font-family: Arial, sans-serif;">Order Date:</strong><br>
-                                    <span style="color: #666; font-family: Arial, sans-serif;">${new Date().toLocaleDateString()}</span>
-                                </td>
-                            </tr>
-                        </table>
-                    </div>
-                    
-                    <!-- Product Items -->
-                    <div style="border-top: 2px solid #f0f0f0; padding-top: 20px; margin-bottom: 30px;">
-                        <h3 style="color: #333; margin: 0 0 20px; font-size: 18px; font-family: Arial, sans-serif;">Order Items</h3>
-                        
-                        <div style="margin-bottom: 15px;">
-                            <div style="padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                                <div style="color: #666; font-size: 14px; line-height: 1.6; font-family: Arial, sans-serif;">
-                                    ${orderItemsString}
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Order Summary -->
-                        <div style="border-top: 2px solid #f0f0f0; padding-top: 20px;">
-                            <table width="100%" border="0" cellpadding="0" cellspacing="0">
-                                <tr>
-                                    <td style="padding: 8px 0; color: #666; font-family: Arial, sans-serif;">Subtotal:</td>
-                                    <td style="padding: 8px 0; text-align: right; color: #666; font-family: Arial, sans-serif;">₹${normalizedTotalPrice}</td>
-                                </tr>
-                                <tr>
-                                    <td style="padding: 8px 0; color: #666; font-family: Arial, sans-serif;">Shipping:</td>
-                                    <td style="padding: 8px 0; text-align: right; color: #10b981; font-weight: bold; font-family: Arial, sans-serif;">${normalizedShippingCost === 0 ? 'FREE' : `₹${normalizedShippingCost}`}</td>
-                                </tr>
-                                <tr>
-                                    <td style="padding: 15px 0 0; font-size: 18px; font-weight: bold; color: #333; font-family: Arial, sans-serif;">Total:</td>
-                                    <td style="padding: 15px 0 0; text-align: right; font-size: 20px; font-weight: bold; color: #d4af37; font-family: Arial, sans-serif;">₹${resolvedFinalAmount}</td>
-                                </tr>
-                            </table>
-                        </div>
-                    </div>
-                    
-                    <!-- Shipping Address -->
-                    <div style="background: #f8f9fa; border-radius: 8px; padding: 20px; margin-bottom: 30px;">
-                        <h3 style="color: #333; margin: 0 0 15px; font-size: 16px; font-family: Arial, sans-serif;">Shipping Address</h3>
-                        <p style="color: #666; margin: 0; line-height: 1.6; font-family: Arial, sans-serif;">
-                            <strong>${shippingInfo.firstname} ${shippingInfo.lastname}</strong><br>
-                            ${shippingInfo.address}<br>
-                            ${shippingInfo.city}, ${shippingInfo.state} - ${shippingInfo.pincode}<br>
-                            Phone: ${shippingInfo.phone}
-                        </p>
-                    </div>
-                    
-                    <!-- CTA Button -->
-                    <div style="text-align: center;">
-                        <a href="#" style="display: inline-block; background: linear-gradient(135deg, #d4af37, #c49f31); color: white; padding: 15px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; font-family: Arial, sans-serif;">Track Your Order</a>
-                    </div>
-                </td>
-            </tr>
-            
-            <!-- Footer -->
-            <tr>
-                <td style="background: #1a1a1a; padding: 30px; text-align: center;">
-                    <p style="color: #999; margin: 0 0 15px; font-size: 14px; font-family: Arial, sans-serif;">Need help? Contact us at support@youandme.com</p>
-                    <div style="margin: 20px 0;">
-                        <a href="#" style="color: #d4af37; text-decoration: none; margin: 0 10px; font-family: Arial, sans-serif;">Instagram</a>
-                        <a href="#" style="color: #d4af37; text-decoration: none; margin: 0 10px; font-family: Arial, sans-serif;">Facebook</a>
-                        <a href="#" style="color: #d4af37; text-decoration: none; margin: 0 10px; font-family: Arial, sans-serif;">Pinterest</a>
-                    </div>
-                    <p style="color: #666; margin: 0; font-size: 12px; font-family: Arial, sans-serif;">© 2024 You & Me Jewelry. All rights reserved.</p>
-                </td>
-            </tr>
-        </table>
-    </div>
-</body>
-</html>
-      `
+      isPartial,
     });
 
-    const { firstname, lastname, email, phone, address } = shippingInfo;
+    const populatedOrder = await OrderModel.findById(order._id).populate("orderItems.product");
 
-    // Check if the user already exists
-    let user = await UserModel.findOne({ email });
+    const orderItemsString = populatedOrder?.orderItems
+      ?.map((item) => formatOrderItemLine(item))
+      .join("<br>");
+    const orderItemsWithGiftWrap =
+      normalizedGiftWrapTotal > 0
+        ? `${orderItemsString}<br>- Gift Wrap (Order Level): Rs${normalizedGiftWrapTotal}`
+        : orderItemsString;
 
-    // If the user doesn't exist, create a new user
-    if (!user) {
-      user = await UserModel.create({
-        email,
-        firstname,
-        lastname,
-        mobile: phone,
-        address
-      });
+    const notificationTasks = [];
+
+    notificationTasks.push(
+      safeFetch(
+        "https://watuska-production.up.railway.app/api/template/api-send/1398372561527099",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization:
+              "Bearer wsk_live_a85bb2fc43ff3285ab17dea902052cfd5ae3de0d75a4e6bd848f1f8d23cd253d",
+          },
+          body: JSON.stringify({
+            to: `+91${populatedOrder?.shippingInfo?.phone}`,
+            templateName: "order_confirmation_client1",
+            language: "en_US",
+            variables: {
+              1: populatedOrder?.shippingInfo?.firstname,
+              2: populatedOrder?.orderNumber,
+              3: orderItemsWithGiftWrap,
+              4: `${populatedOrder?.finalAmount}`,
+            },
+            name: populatedOrder?.shippingInfo?.firstname,
+          }),
+        },
+        "whatsapp-customer"
+      )
+    );
+
+    notificationTasks.push(
+      safeFetch(
+        "https://watuska-production.up.railway.app/api/template/api-send/1252741026187542",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization:
+              "Bearer wsk_live_53fa572dfb8b86f7b5da5bd9c41d52ba659daf4959cfa176a806e7c132b170c3",
+          },
+          body: JSON.stringify({
+            to: "+916396230428",
+            templateName: "new_order_admin",
+            language: "en_US",
+            variables: {
+              1: populatedOrder?.orderNumber,
+              2: populatedOrder?.shippingInfo?.firstname,
+              3: populatedOrder?.shippingInfo?.phone,
+              4: orderItemsWithGiftWrap,
+              5: `${populatedOrder?.finalAmount}`,
+              6: populatedOrder?.orderType,
+            },
+            name: "UnMe Orders",
+          }),
+        },
+        "whatsapp-admin-1"
+      )
+    );
+
+    notificationTasks.push(
+      safeFetch(
+        "https://watuska-production.up.railway.app/api/template/api-send/1252741026187542",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization:
+              "Bearer wsk_live_53fa572dfb8b86f7b5da5bd9c41d52ba659daf4959cfa176a806e7c132b170c3",
+          },
+          body: JSON.stringify({
+            to: "+917807178263",
+            templateName: "new_order_admin",
+            language: "en_US",
+            variables: {
+              1: populatedOrder?.orderNumber,
+              2: populatedOrder?.shippingInfo?.firstname,
+              3: populatedOrder?.shippingInfo?.phone,
+              4: orderItemsWithGiftWrap,
+              5: `${populatedOrder?.finalAmount}`,
+              6: populatedOrder?.orderType,
+            },
+            name: "Divya Mam",
+          }),
+        },
+        "whatsapp-admin-2"
+      )
+    );
+
+    if (normalizedShippingInfo?.email) {
+      notificationTasks.push(
+        safeSendEmail(
+          {
+            to: normalizedShippingInfo.email,
+            subject: "Order Confirmed! - U n Me Jewelry",
+            text: `Your order #${order.orderNumber} has been confirmed. Thank you for your purchase!`,
+            htmlContent: orderConfirmationEmail({
+              orderNumber: order.orderNumber,
+              shippingInfo: normalizedShippingInfo,
+              orderItems: populatedOrder?.orderItems || [],
+              totalPrice: normalizedTotalPrice,
+              finalAmount: order.finalAmount,
+              shippingCost: normalizedShippingCost,
+              discount: normalizedDiscount,
+              giftWrapTotal: normalizedGiftWrapTotal,
+              codCharge: normalizedCodCharge,
+            }),
+          },
+          "email-customer-order-confirmation"
+        )
+      );
     }
 
-    // Update the inventory
-    await processOrder(normalizedOrderItems);
+    notificationTasks.push(
+      safeSendEmail(
+        {
+          to: BRAND_OWNER_EMAIL,
+          subject: `New Order Received - #${order.orderNumber}`,
+          text: `A new order #${order.orderNumber} has been placed. Customer: ${normalizedShippingInfo.firstname} ${normalizedShippingInfo.lastname}, Amount: Rs${formatInr(order.finalAmount)}.`,
+          htmlContent: buildOwnerOrderEmailHtml({
+            orderNumber: order.orderNumber,
+            shippingInfo: normalizedShippingInfo,
+            orderItems: populatedOrder?.orderItems || [],
+            finalAmount: order.finalAmount,
+            totalPrice: normalizedTotalPrice,
+            shippingCost: normalizedShippingCost,
+            discount: normalizedDiscount,
+            giftWrapTotal: normalizedGiftWrapTotal,
+            codCharge: normalizedCodCharge,
+            orderType: normalizedOrderType,
+          }),
+        },
+        "email-owner-new-order"
+      )
+    );
 
-    // Schedule a message after 3 hours with order details
+    await Promise.allSettled(notificationTasks);
+
+    const { firstname, lastname, email, phone, address } = normalizedShippingInfo;
+    if (email) {
+      const existingUser = await UserModel.findOne({ email });
+      if (!existingUser) {
+        await UserModel.create({
+          email,
+          firstname,
+          lastname,
+          mobile: String(phone),
+          address,
+        });
+      }
+    }
+
+    await processOrder(sanitizedOrderItems);
+
     setTimeout(async () => {
-      const populatedOrder = await OrderModel.findById(order._id).populate("orderItems.product");
-      await msgAfter3hour(
-        shippingInfo.firstname, 
-        order.orderNumber, 
-        shippingInfo.email,
-        populatedOrder.orderItems,
-        order.finalAmount
-      );
-    }, 10800000); // 3 hours in milliseconds
-  
+      try {
+        if (!normalizedShippingInfo?.email) return;
+        const delayedOrder = await OrderModel.findById(order._id).populate("orderItems.product");
+        await msgAfter3hour(
+          normalizedShippingInfo.firstname,
+          order.orderNumber,
+          normalizedShippingInfo.email,
+          delayedOrder?.orderItems || [],
+          order.finalAmount
+        );
+      } catch (error) {
+        console.error(`[create-order] delayed-dispatch-email failed: ${error.message}`);
+      }
+    }, 10800000);
+
     return Response.json(
-      { success: true, status: "Order Created", amount: order.finalAmount, firstname: order.shippingInfo.firstname, orderNumber: order.orderNumber },
+      {
+        success: true,
+        status: "Order Created",
+        amount: order.finalAmount,
+        firstname: order.shippingInfo.firstname,
+        orderNumber: order.orderNumber,
+      },
       { status: 200 }
     );
   } catch (error) {
@@ -505,4 +709,4 @@ export async function POST(req,res){
       { status: 500 }
     );
   }
-};
+}
