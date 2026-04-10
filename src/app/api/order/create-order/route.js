@@ -14,6 +14,7 @@ export const config = {
 
 const BRAND_OWNER_EMAIL = "unmejewels@gmail.com";
 const EXTERNAL_CALL_TIMEOUT_MS = 10000;
+const PREPAID_ORDER_TYPES = new Set(["prepaid", "payu", "online", "pre-paid"]);
 
 const toFiniteNumber = (value) => {
   const parsed = Number(value);
@@ -473,6 +474,41 @@ export async function POST(req) {
 
   try {
     await connectDb();
+
+    const requestedOrderType = String(orderType || "").trim().toLowerCase();
+    const isRequestedPrepaid =
+      normalizedOrderType === "Prepaid" || PREPAID_ORDER_TYPES.has(requestedOrderType);
+    const prepaidTransactionId = String(
+      paymentInfo?.razorpayPaymentId || paymentInfo?.paymentId || ""
+    ).trim();
+
+    // Idempotency guard: payment gateways can retry callbacks for the same prepaid transaction.
+    // Return existing order instead of creating duplicates.
+    if (
+      isRequestedPrepaid &&
+      prepaidTransactionId &&
+      prepaidTransactionId.toUpperCase() !== "MANUAL"
+    ) {
+      const existingOrder = await OrderModel.findOne({
+        $or: [
+          { "paymentInfo.razorpayPaymentId": prepaidTransactionId },
+          { "paymentInfo.paymentId": prepaidTransactionId },
+        ],
+      }).lean();
+
+      if (existingOrder) {
+        return Response.json(
+          {
+            success: true,
+            status: "Order Already Created",
+            amount: existingOrder.finalAmount,
+            firstname: existingOrder?.shippingInfo?.firstname || "",
+            orderNumber: existingOrder.orderNumber,
+          },
+          { status: 200 }
+        );
+      }
+    }
 
     // Keep parity with website route: validations can be re-enabled whenever needed.
     // await validateOrderPricesAndAmounts(

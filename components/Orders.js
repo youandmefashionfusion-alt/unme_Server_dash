@@ -26,8 +26,25 @@ const ALLOWED_DELETE_ADMIN = {
   email: 'ujjawal@codexae.com',
 };
 const INR_SYMBOL = '\u20B9';
+const PREPAID_ORDER_TYPES = new Set(['prepaid', 'payu', 'online', 'pre-paid']);
 
 const normalize = (value) => String(value || '').trim().toLowerCase();
+const normalizeOrderType = (value) => String(value || '').trim().toLowerCase();
+const normalizeOrderStatus = (value) => String(value || '').trim().toLowerCase();
+const isPrepaidOrder = (order) => PREPAID_ORDER_TYPES.has(normalizeOrderType(order?.orderType));
+const isCancelledOrder = (order) => {
+  const orderType = normalizeOrderType(order?.orderType);
+  const orderStatus = normalizeOrderStatus(order?.orderStatus);
+  return orderType === 'cancelled' || orderStatus === 'cancelled';
+};
+const getOrderTypeLabel = (order) => {
+  if (isCancelledOrder(order)) return 'Cancelled';
+  if (isPrepaidOrder(order)) return 'Prepaid';
+  const normalizedType = normalizeOrderType(order?.orderType);
+  if (normalizedType === 'cod') return 'COD';
+  if (normalizedType === 'returned') return 'Returned';
+  return order?.orderType || 'N/A';
+};
 
 export default function OrdersPage() {
   const router = useRouter();
@@ -197,8 +214,8 @@ export default function OrdersPage() {
   };
 
   const getStatusClass = (order) => {
-    if (order.orderType === 'Cancelled') return styles.cancelled;
-    return order.orderType === 'Prepaid' ? styles.prepaid : styles.cod;
+    if (isCancelledOrder(order)) return styles.cancelled;
+    return isPrepaidOrder(order) ? styles.prepaid : styles.cod;
   };
 
 
@@ -391,9 +408,9 @@ export default function OrdersPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
                     <span className={styles.orderNumber}>#{order.orderNumber}</span>
                     <span className={`${styles.badge} ${getStatusClass(order)}`}>
-                      {order?.orderType}
+                      {getOrderTypeLabel(order)}
                     </span>
-                    {order?.orderType !== 'Cancelled' && order?.orderCalled === 'Called' && (
+                    {!isCancelledOrder(order) && order?.orderCalled === 'Called' && (
                       <span className={`${styles.badge} ${styles.prepaid}`}>
                         Confirmed
                       </span>
@@ -476,7 +493,7 @@ export default function OrdersPage() {
                         <Check size={14} />
                       </button>
                     )}
-                    {order.orderType !== 'Cancelled' && (
+                    {!isCancelledOrder(order) && (
                       <button
                         onClick={() => handleCancel(order)}
                         className={styles.cancelBtn}

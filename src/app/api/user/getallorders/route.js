@@ -2,27 +2,42 @@ import connectDb from "../../../../../config/connectDb";
 import OrderModel from "../../../../../models/orderModel";
 import ProductModel from "../../../../../models/productModel";
 
+const PREPAID_TYPES = ['prepaid', 'payu', 'online', 'pre-paid'];
+
 function buildFilterQuery(filter) {
   switch (filter) {
     case 'confirmed':
-      return { orderCalled: 'Called', orderStatus: { $ne: 'Cancelled' } };
+      return { _orderCalledNormalized: 'called', _orderStatusNormalized: { $ne: 'cancelled' } };
     case 'pending':
       return {
-        orderCalled: { $ne: 'Called' },
-        orderStatus: { $nin: ['Cancelled', 'Fulfilled', 'Returned', 'Delivered'] },
+        _orderCalledNormalized: { $ne: 'called' },
+        _orderStatusNormalized: { $nin: ['cancelled', 'fulfilled', 'returned', 'delivered'] },
       };
     case 'fulfilled':
-      return { orderStatus: 'Fulfilled' };
+      return { _orderStatusNormalized: 'fulfilled' };
     case 'cancelled':
-      return { orderType: 'Cancelled' };
+      return {
+        $or: [
+          { _orderTypeNormalized: 'cancelled' },
+          { _orderStatusNormalized: 'cancelled' },
+        ],
+      };
     case 'returned':
-      return { orderType: 'Returned' };
+      return {
+        $or: [
+          { _orderTypeNormalized: 'returned' },
+          { _orderStatusNormalized: 'returned' },
+        ],
+      };
     case 'cod':
-      return { orderType: 'COD', orderStatus: { $ne: 'Cancelled' } };
+      return { _orderTypeNormalized: 'cod', _orderStatusNormalized: { $ne: 'cancelled' } };
     case 'prepaid':
-      return { orderType: 'Prepaid', orderStatus: { $ne: 'Cancelled' } };
+      return {
+        _orderTypeNormalized: { $in: PREPAID_TYPES },
+        _orderStatusNormalized: { $ne: 'cancelled' },
+      };
     case 'arriving':
-      return { orderStatus: 'Arriving' };
+      return { _orderStatusNormalized: 'arriving' };
     default:
       return {};
   }
@@ -66,13 +81,33 @@ export async function GET(request) {
 
     // Apply the selected filter to the main query (for orders list)
     const filterQuery = buildFilterQuery(filter);
-    const mainMatch = { ...baseMatch, ...filterQuery };
 
     // Aggregation pipeline
     const skip = (page - 1) * limit;
+    const confirmedFilter = buildFilterQuery('confirmed');
+    const pendingFilter = buildFilterQuery('pending');
+    const fulfilledFilter = buildFilterQuery('fulfilled');
+    const cancelledFilter = buildFilterQuery('cancelled');
+    const returnedFilter = buildFilterQuery('returned');
+    const codFilter = buildFilterQuery('cod');
+    const prepaidFilter = buildFilterQuery('prepaid');
+    const arrivingFilter = buildFilterQuery('arriving');
 
     const aggregation = await OrderModel.aggregate([
       { $match: baseMatch }, // base match first (date + search)
+      {
+        $addFields: {
+          _orderTypeNormalized: {
+            $toLower: { $trim: { input: { $ifNull: ['$orderType', ''] } } },
+          },
+          _orderStatusNormalized: {
+            $toLower: { $trim: { input: { $ifNull: ['$orderStatus', ''] } } },
+          },
+          _orderCalledNormalized: {
+            $toLower: { $trim: { input: { $ifNull: ['$orderCalled', ''] } } },
+          },
+        },
+      },
       {
         $facet: {
           // Paginated orders with product population
@@ -119,7 +154,14 @@ export async function GET(request) {
                 },
               },
             },
-            { $project: { populatedProducts: 0 } },
+            {
+              $project: {
+                populatedProducts: 0,
+                _orderTypeNormalized: 0,
+                _orderStatusNormalized: 0,
+                _orderCalledNormalized: 0,
+              },
+            },
           ],
           // Total count for pagination (with selected filter)
           totalCount: [
@@ -128,40 +170,35 @@ export async function GET(request) {
           ],
           // Stats for each filter type (count + total finalAmount)
           confirmed: [
-            { $match: { orderCalled: 'Called', orderStatus: { $ne: 'Cancelled' } } },
+            { $match: confirmedFilter },
             { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$finalAmount' } } },
           ],
           pending: [
-            {
-              $match: {
-                orderCalled: { $ne: 'Called' },
-                orderStatus: { $nin: ['Cancelled', 'Fulfilled', 'Returned', 'Delivered'] },
-              },
-            },
+            { $match: pendingFilter },
             { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$finalAmount' } } },
           ],
           fulfilled: [
-            { $match: { orderStatus: 'Fulfilled' } },
+            { $match: fulfilledFilter },
             { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$finalAmount' } } },
           ],
           cancelled: [
-            { $match: { orderType: 'Cancelled' } },
+            { $match: cancelledFilter },
             { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$finalAmount' } } },
           ],
           returned: [
-            { $match: { orderType: 'Returned' } },
+            { $match: returnedFilter },
             { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$finalAmount' } } },
           ],
           cod: [
-            { $match: { orderType: 'COD', orderStatus: { $ne: 'Cancelled' } } },
+            { $match: codFilter },
             { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$finalAmount' } } },
           ],
           prepaid: [
-            { $match: { orderType: 'Prepaid', orderStatus: { $ne: 'Cancelled' } } },
+            { $match: prepaidFilter },
             { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$finalAmount' } } },
           ],
           arriving: [
-            { $match: { orderStatus: 'Arriving' } },
+            { $match: arrivingFilter },
             { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$finalAmount' } } },
           ],
         },
