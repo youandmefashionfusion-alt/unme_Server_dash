@@ -17,6 +17,7 @@ import {
   Send
 } from 'lucide-react';
 import { useSelector } from 'react-redux';
+import { isRestrictedAdmin } from '@/lib/restrictedAdmin';
 
 const UsersPage = () => {
     const [users, setUsers] = useState([]);
@@ -27,13 +28,16 @@ const UsersPage = () => {
     const [isCreating, setIsCreating] = useState(false);
     const [otp, setOtp] = useState('');
     const [otpSent, setOtpSent] = useState(false);
-    const [verified, setVerified] = useState(true);
+    const [verified, setVerified] = useState(false);
+    const [otpLoading, setOtpLoading] = useState(false);
+    const [otpVerificationId, setOtpVerificationId] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(false);
 
     const currentUser = useSelector((state) => state.auth.user);
+    const canManageUsers = isRestrictedAdmin(currentUser);
 
     const fetchUsers = async () => {
         try {
@@ -62,21 +66,31 @@ const UsersPage = () => {
     }, []);
 
     const handleDelete = async (id) => {
+        if (!canManageUsers) {
+            toast.error('You are not authorized to delete users');
+            return;
+        }
+
         if (!verified) {
             toast.error('Please verify OTP first');
             return;
         }
 
         try {
-            await fetch(`/api/user/delete-user?id=${id}&token=${currentUser?.token}`, {
+            const response = await fetch(`/api/user/delete-user?id=${id}&token=${currentUser?.token}`, {
                 method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' }
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ otpVerificationId }),
             });
+            const data = await response.json();
+            if (!response.ok || !data?.success) {
+                throw new Error(data?.message || 'Failed to delete user');
+            }
             toast.success('User deleted successfully');
             fetchUsers();
             closePopup();
         } catch (error) {
-            toast.error('Failed to delete user');
+            toast.error(error.message || 'Failed to delete user');
         }
     };
 
@@ -87,43 +101,61 @@ const UsersPage = () => {
         }
 
         try {
-            await fetch(`/api/user/update-user?token=${currentUser?.token}`, {
+            const response = await fetch(`/api/user/update-user?token=${currentUser?.token}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(selectedUser),
             });
+            if (!response.ok) {
+                throw new Error('Failed to update user');
+            }
             toast.success('User updated successfully');
             fetchUsers();
             closePopup();
         } catch (error) {
-            toast.error('Failed to update user');
+            toast.error(error.message || 'Failed to update user');
         }
     };
 
     const handleCreate = async () => {
+        if (!canManageUsers) {
+            toast.error('You are not authorized to create users');
+            return;
+        }
+
+        if (!verified || !otpVerificationId) {
+            toast.error('Please verify OTP first');
+            return;
+        }
 
         try {
-            await fetch(`/api/user/create-user?token=${currentUser?.token}`, {
+            const response = await fetch(`/api/user/create-user?token=${currentUser?.token}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(selectedUser),
+                body: JSON.stringify({ ...selectedUser, otpVerificationId }),
             });
+            const data = await response.json();
+            if (!response.ok || !data?.success) {
+                throw new Error(data?.message || 'Failed to create user');
+            }
             toast.success('User created successfully');
             fetchUsers();
             closePopup();
         } catch (error) {
-            toast.error('Failed to create user');
+            toast.error(error.message || 'Failed to create user');
         }
     };
 
     const openPopup = (user = {}, editing = false, creating = false) => {
-        setSelectedUser(user);
+        const nextUser = creating ? { role: 'user', ...user } : user;
+        setSelectedUser(nextUser);
         setIsEditing(editing);
         setIsCreating(creating);
         setPopupVisible(true);
         setVerified(false);
         setOtpSent(false);
         setOtp('');
+        setOtpVerificationId('');
     };
 
     const closePopup = () => {
@@ -133,6 +165,73 @@ const UsersPage = () => {
         setOtp('');
         setOtpSent(false);
         setVerified(false);
+        setOtpVerificationId('');
+    };
+
+    const sendOtp = async () => {
+        if (!canManageUsers) {
+            toast.error('You are not authorized for OTP verification');
+            return;
+        }
+
+        setOtpLoading(true);
+        try {
+            const res = await fetch(`/api/user/manage-otp/send?token=${currentUser?.token}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: currentUser?.email }),
+            });
+            const data = await res.json();
+
+            if (!res.ok || !data?.success) {
+                throw new Error(data?.message || 'Failed to send OTP');
+            }
+
+            setOtpSent(true);
+            setVerified(false);
+            setOtpVerificationId('');
+            toast.success('OTP sent to your email');
+        } catch (error) {
+            toast.error(error.message || 'Failed to send OTP');
+        } finally {
+            setOtpLoading(false);
+        }
+    };
+
+    const verifyOtp = async () => {
+        if (!canManageUsers) {
+            toast.error('You are not authorized for OTP verification');
+            return;
+        }
+
+        if (!/^\d{6}$/.test(String(otp || '').trim())) {
+            toast.error('Please enter a valid 6-digit OTP');
+            return;
+        }
+
+        setOtpLoading(true);
+        try {
+            const res = await fetch(`/api/user/manage-otp/verify?token=${currentUser?.token}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ otp }),
+            });
+            const data = await res.json();
+
+            if (!res.ok || !data?.success) {
+                throw new Error(data?.message || 'Invalid OTP');
+            }
+
+            setVerified(true);
+            setOtpVerificationId(data?.otpVerificationId || '');
+            toast.success('OTP verified successfully');
+        } catch (error) {
+            setVerified(false);
+            setOtpVerificationId('');
+            toast.error(error.message || 'Failed to verify OTP');
+        } finally {
+            setOtpLoading(false);
+        }
     };
 
     const exportData = async (dataType) => {
@@ -197,8 +296,6 @@ const UsersPage = () => {
             return true;
         });
 
-    const canManageAdmins = currentUser?.firstname === 'keshav';
-
     return (
         <div className={styles.container}>
             {/* Header */}
@@ -212,9 +309,10 @@ const UsersPage = () => {
                 <button 
                     className={styles.primaryButton}
                     onClick={() => openPopup({}, false, true)}
+                    disabled={!canManageUsers}
                 >
                     <Plus size={18} />
-                    Create User
+                    Create User/Admin
                 </button>
             </div>
 
@@ -320,7 +418,8 @@ const UsersPage = () => {
                                 <th>User ID</th>
                                 <th>Mobile</th>
                                 <th>Email</th>
-                                {canManageAdmins && filter === 'admin' && <th>Actions</th>}
+                                <th>Role</th>
+                                {canManageUsers && <th>Actions</th>}
                             </tr>
                         </thead>
                         <tbody>
@@ -339,7 +438,8 @@ const UsersPage = () => {
                                     </td>
                                     <td>{user.mobile}</td>
                                     <td>{user.email}</td>
-                                    {canManageAdmins && filter === 'admin' && (
+                                    <td>{user.role === 'admin' ? 'Admin' : 'User'}</td>
+                                    {canManageUsers && (
                                         <td>
                                             <div className={styles.actionButtons}>
                                                 <button 
@@ -427,6 +527,19 @@ const UsersPage = () => {
                                             className={styles.input}
                                         />
                                     </div>
+                                    {isCreating && (
+                                        <div className={styles.formGroup}>
+                                            <label>Role</label>
+                                            <select
+                                                value={selectedUser.role || 'user'}
+                                                onChange={(e) => setSelectedUser({ ...selectedUser, role: e.target.value })}
+                                                className={styles.input}
+                                            >
+                                                <option value="user">User</option>
+                                                <option value="admin">Admin</option>
+                                            </select>
+                                        </div>
+                                    )}
                                 </div>
                             ) : (
                                 <div className={styles.userDetails}>
@@ -439,6 +552,43 @@ const UsersPage = () => {
                                 </div>
                             )}
 
+                            <div className={styles.otpSection}>
+                                <label>Email OTP Verification</label>
+                                {verified ? (
+                                    <div className={styles.verifiedBadge}>
+                                        <CheckCircle size={16} />
+                                        OTP Verified
+                                    </div>
+                                ) : (
+                                    <div className={styles.otpInputGroup}>
+                                        <input
+                                            type="text"
+                                            maxLength={6}
+                                            value={otp}
+                                            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                                            placeholder="Enter 6-digit OTP"
+                                            className={styles.otpInput}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={sendOtp}
+                                            className={styles.otpButton}
+                                            disabled={otpLoading || !canManageUsers}
+                                        >
+                                            <Send size={14} />
+                                            {otpSent ? 'Resend OTP' : 'Send OTP'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={verifyOtp}
+                                            className={styles.verifyButton}
+                                            disabled={otpLoading || !otpSent || !canManageUsers}
+                                        >
+                                            Verify
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         <div className={styles.modalActions}>
@@ -448,6 +598,7 @@ const UsersPage = () => {
                             {isCreating ? (
                                 <button 
                                     onClick={handleCreate} 
+                                    disabled={!verified || !canManageUsers}
                                     className={styles.confirmButton}
                                 >
                                     Create User
@@ -455,6 +606,7 @@ const UsersPage = () => {
                             ) : isEditing ? (
                                 <button 
                                     onClick={handleEdit} 
+                                    disabled={!verified}
                                     className={styles.confirmButton}
                                 >
                                     Update User
@@ -462,7 +614,7 @@ const UsersPage = () => {
                             ) : (
                                 <button 
                                     onClick={() => handleDelete(selectedUser._id)} 
-                                    disabled={!verified}
+                                    disabled={!verified || !canManageUsers}
                                     className={styles.deleteConfirmButton}
                                 >
                                     Delete User

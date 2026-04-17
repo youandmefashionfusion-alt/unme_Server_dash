@@ -3,10 +3,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSelector } from 'react-redux';
-import { Eye, Trash2, Search, Filter, Calendar, Phone, Mail, ShoppingCart, Gift } from 'lucide-react';
+import { Eye, Trash2, Search, Filter, Calendar, Phone, Mail, ShoppingCart, Gift, MessageSquare, Save } from 'lucide-react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import styles from '../src/app/orders/orders.module.css';
+import styles from '../src/app/abandoned/abandoned.module.css';
 
 const DEFAULT_PAGINATION = {
   currentPage: 1,
@@ -52,6 +52,12 @@ const formatCurrency = (amount) => {
   const value = Number(amount) || 0;
   return value.toLocaleString('en-IN');
 };
+const formatDate = (value) =>
+  new Date(value).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 
 const Abandoned = () => {
   const [abandonedOrders, setAbandonedOrders] = useState([]);
@@ -59,6 +65,8 @@ const Abandoned = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [pagination, setPagination] = useState(DEFAULT_PAGINATION);
+  const [noteDrafts, setNoteDrafts] = useState({});
+  const [savingNoteOrderId, setSavingNoteOrderId] = useState('');
 
   const user = useSelector((state) => state.auth.user);
   const router = useRouter();
@@ -109,6 +117,15 @@ const Abandoned = () => {
     fetchAbandonedOrders();
   }, [fetchAbandonedOrders]);
 
+  useEffect(() => {
+    const nextDrafts = {};
+    abandonedOrders.forEach((order) => {
+      if (!order?._id) return;
+      nextDrafts[order._id] = String(order?.msg || '').trim();
+    });
+    setNoteDrafts(nextDrafts);
+  }, [abandonedOrders]);
+
   const handleDelete = async (order) => {
     if (!window.confirm(`Are you sure you want to delete abandoned order #${order.orderNumber}?`)) {
       return;
@@ -144,6 +161,55 @@ const Abandoned = () => {
     }
   };
 
+  const handleSaveAbandonedNote = async (order) => {
+    const orderId = order?._id;
+    const note = String(noteDrafts?.[orderId] || '').trim();
+
+    if (!orderId) return;
+    if (!note) {
+      toast.error('Please enter a note');
+      return;
+    }
+    if (!user?.token) {
+      toast.error('Authentication required');
+      return;
+    }
+
+    setSavingNoteOrderId(orderId);
+    try {
+      const params = new URLSearchParams({
+        id: orderId,
+        token: user.token,
+        msg: note,
+      });
+
+      const response = await fetch(`/api/abandoned/send-msg?${params.toString()}`, {
+        method: 'PUT',
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || 'Failed to save note');
+      }
+
+      await createHistory({
+        name: user?.firstname,
+        title: 'Abandoned Note Updated',
+        sku: order?.orderNumber || '',
+        productchange: `Note updated for #${order?.orderNumber || ''}`,
+        time: new Date().toISOString(),
+      });
+
+      toast.success('Abandoned note saved');
+      fetchAbandonedOrders();
+    } catch (error) {
+      console.error('Error saving abandoned note:', error);
+      toast.error(error.message || 'Failed to save note');
+    } finally {
+      setSavingNoteOrderId('');
+    }
+  };
+
   const nextPage = () => {
     if (currentPage < pagination.totalPages) {
       updateURL(currentPage + 1);
@@ -156,17 +222,6 @@ const Abandoned = () => {
     }
   };
 
-  const getStatusColor = (status) => {
-    switch (normalizeOrderCalled(status)) {
-      case 'Called':
-        return '#10b981';
-      case 'notpicked':
-        return '#ef4444';
-      default:
-        return '#6b7280';
-    }
-  };
-
   const getStatusText = (status) => {
     switch (normalizeOrderCalled(status)) {
       case 'Called':
@@ -175,6 +230,16 @@ const Abandoned = () => {
         return 'Not Picked';
       default:
         return 'Pending';
+    }
+  };
+  const getStatusClass = (status) => {
+    switch (normalizeOrderCalled(status)) {
+      case 'Called':
+        return styles.statusCalled;
+      case 'notpicked':
+        return styles.statusNotPicked;
+      default:
+        return styles.statusPending;
     }
   };
 
@@ -215,11 +280,11 @@ const Abandoned = () => {
           <p className={styles.subtitle}>Manage and recover abandoned shopping carts</p>
         </div>
         <div className={styles.headerActions}>
-          <span className={styles.pageInfo}>Total: {pagination.totalOrders}</span>
+          <span className={styles.statPill}>Total {pagination.totalOrders}</span>
         </div>
       </div>
 
-      <div className={styles.searchContainer}>
+      <div className={styles.controlsCard}>
         <div className={styles.searchBox}>
           <Search size={18} className={styles.searchIcon} />
           <input
@@ -229,9 +294,18 @@ const Abandoned = () => {
             onChange={(e) => setSearchTerm(e.target.value)}
             className={styles.searchField}
           />
+          {searchTerm && (
+            <button
+              className={styles.clearSearch}
+              onClick={() => setSearchTerm('')}
+              title="Clear search"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
-        <div className={styles.filterButtons}>
-          <Filter size={16} />
+        <div className={styles.filterWrap}>
+          <Filter size={16} className={styles.filterIcon} />
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -261,21 +335,15 @@ const Abandoned = () => {
             {filteredOrders.map((order) => (
               <div key={order._id} className={styles.card}>
                 <div className={styles.cardHeader}>
-                  <div>
+                  <div className={styles.cardHeadLeft}>
                     <span className={styles.orderNumber}>#{order.orderNumber}</span>
-                    <span
-                      className={styles.badge}
-                      style={{
-                        backgroundColor: getStatusColor(order.orderCalled),
-                        color: 'white',
-                      }}
-                    >
+                    <span className={`${styles.badge} ${getStatusClass(order.orderCalled)}`}>
                       {getStatusText(order.orderCalled)}
                     </span>
                   </div>
                   <div className={styles.date}>
                     <Calendar size={14} />
-                    {new Date(order.createdAt).toLocaleDateString('en-IN')}
+                    {formatDate(order.createdAt)}
                   </div>
                 </div>
 
@@ -330,8 +398,43 @@ const Abandoned = () => {
                   )}
                 </div>
 
+                <div className={styles.noteSection}>
+                  <div className={styles.noteHeader}>
+                    <MessageSquare size={14} />
+                    <span>Note</span>
+                  </div>
+                  {String(order?.msg || '').trim() && (
+                    <p className={styles.notePreview}>
+                      Last note: {String(order.msg).trim()}
+                    </p>
+                  )}
+                  <div className={styles.noteComposer}>
+                    <input
+                      type="text"
+                      value={noteDrafts?.[order._id] || ''}
+                      onChange={(e) =>
+                        setNoteDrafts((prev) => ({
+                          ...prev,
+                          [order._id]: e.target.value,
+                        }))
+                      }
+                      placeholder="Add note for this abandoned cart..."
+                      className={styles.noteInput}
+                    />
+                    <button
+                      onClick={() => handleSaveAbandonedNote(order)}
+                      className={styles.noteSaveBtn}
+                      disabled={savingNoteOrderId === order._id}
+                      title="Save Note"
+                    >
+                      <Save size={13} />
+                      {savingNoteOrderId === order._id ? 'Saving' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+
                 <div className={styles.cardFooter}>
-                  <div>
+                  <div className={styles.totalWrap}>
                     <span className={styles.label}>Total</span>
                     <span className={styles.amount}>Rs.{formatCurrency(order.finalAmount)}</span>
                   </div>

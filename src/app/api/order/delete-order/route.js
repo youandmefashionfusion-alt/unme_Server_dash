@@ -2,23 +2,7 @@ import jwt from "jsonwebtoken";
 import connectDb from "../../../../../config/connectDb";
 import OrderModel from "../../../../../models/orderModel";
 import UserModel from "../../../../../models/userModel";
-
-const ALLOWED_DELETE_ADMIN = {
-  mobile: "9719250693",
-  firstname: "ujjawal",
-  email: "ujjawal@codexae.com",
-};
-
-const normalize = (value) => String(value || "").trim().toLowerCase();
-
-const isAllowedDeleteAdmin = (user = {}) => {
-  return (
-    normalize(user?.mobile) === normalize(ALLOWED_DELETE_ADMIN.mobile) &&
-    normalize(user?.firstname) === normalize(ALLOWED_DELETE_ADMIN.firstname) &&
-    normalize(user?.email) === normalize(ALLOWED_DELETE_ADMIN.email) &&
-    normalize(user?.role) === "admin"
-  );
-};
+import { isRestrictedAdmin } from "../../../../lib/restrictedAdmin";
 
 export async function DELETE(request) {
   const { searchParams } = new URL(request.url);
@@ -52,7 +36,7 @@ export async function DELETE(request) {
       );
     }
 
-    if (!isAllowedDeleteAdmin(requestingUser)) {
+    if (!isRestrictedAdmin(requestingUser)) {
       return Response.json(
         { success: false, message: "Not authorized to delete orders" },
         { status: 403 }
@@ -78,4 +62,3 @@ export async function DELETE(request) {
     );
   }
 }
-

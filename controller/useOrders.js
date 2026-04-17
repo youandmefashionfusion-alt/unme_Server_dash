@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 
 export const useOrders = () => {
   const [orders, setOrders] = useState([]);
-  const [filters, setFilters] = useState([]);
+  const [filters, setFilters] = useState({});
   const [loading, setLoading] = useState(false);
   const [pagination, setPagination] = useState({ page: 1, hasMore: false });
   const { user } = useSelector((state) => state.auth);

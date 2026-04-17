@@ -17,6 +17,7 @@ import {
 import { useSelector } from "react-redux";
 
 const EMPTY_METRIC = { revenue: 0, orders: 0, items: 0 };
+const DASHBOARD_TIMEZONE = "Asia/Kolkata";
 
 const initialStats = {
   today: EMPTY_METRIC,
@@ -196,6 +197,7 @@ const Home = () => {
       day: "numeric",
       month: "short",
       year: "numeric",
+      timeZone: DASHBOARD_TIMEZONE,
     });
   }, []);
 

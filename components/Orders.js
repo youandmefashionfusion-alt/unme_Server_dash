@@ -2,12 +2,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Search, Calendar, MapPin, Phone, Package, X, Check, Download, Trash2, Gift } from 'lucide-react';
+import { Plus, Search, Calendar, MapPin, Phone, Package, X, Check, Download, Trash2, Gift, MessageSquare, Save } from 'lucide-react';
 import { useOrders } from '../controller/useOrders';
 import styles from '../src/app/orders/orders.module.css';
 import filterStyles from '../src/app/orders/orderFilters.module.css';
 import toast from 'react-hot-toast';
 import { useSelector } from 'react-redux';
+import { isRestrictedAdmin } from '@/lib/restrictedAdmin';
 
 // Filter definitions
 const FILTERS = [
@@ -20,11 +21,6 @@ const FILTERS = [
   { key: 'prepaid', label: 'Prepaid', color: 'purple' },
 ];
 
-const ALLOWED_DELETE_ADMIN = {
-  mobile: '9719250693',
-  firstname: 'ujjawal',
-  email: 'ujjawal@codexae.com',
-};
 const INR_SYMBOL = '\u20B9';
 const PREPAID_ORDER_TYPES = new Set(['prepaid', 'payu', 'online', 'pre-paid']);
 
@@ -45,6 +41,12 @@ const getOrderTypeLabel = (order) => {
   if (normalizedType === 'returned') return 'Returned';
   return order?.orderType || 'N/A';
 };
+const getLatestOrderNote = (order) => {
+  const comments = Array.isArray(order?.orderComment) ? order.orderComment : [];
+  if (!comments.length) return '';
+  const latestComment = comments[comments.length - 1];
+  return String(latestComment?.message || '').trim();
+};
 
 export default function OrdersPage() {
   const router = useRouter();
@@ -59,16 +61,24 @@ export default function OrdersPage() {
   const [fromOrder, setFromOrder] = useState('');
   const [toOrder, setToOrder] = useState('');
   const [exportLoading, setExportLoading] = useState(false);
+  const [noteDrafts, setNoteDrafts] = useState({});
+  const [savingNoteOrderId, setSavingNoteOrderId] = useState('');
   const { orders, loading, pagination, fetchOrders, updateOrderStatus, filters } = useOrders();
   const { user } = useSelector((state) => state.auth);
-  const canDeleteOrders =
-    normalize(user?.mobile) === normalize(ALLOWED_DELETE_ADMIN.mobile) &&
-    normalize(user?.firstname) === normalize(ALLOWED_DELETE_ADMIN.firstname) &&
-    normalize(user?.email) === normalize(ALLOWED_DELETE_ADMIN.email);
+  const canDeleteOrders = isRestrictedAdmin(user);
 
   useEffect(() => {
     fetchOrders(page, searchQuery, activeFilter, startDate, endDate);
   }, [page, searchQuery, activeFilter, startDate, endDate, fetchOrders]);
+
+  useEffect(() => {
+    const nextDrafts = {};
+    orders.forEach((order) => {
+      if (!order?._id) return;
+      nextDrafts[order._id] = getLatestOrderNote(order);
+    });
+    setNoteDrafts(nextDrafts);
+  }, [orders]);
 
   const handleSearch = (e) => {
     if (e.key === 'Enter') {
@@ -181,6 +191,53 @@ export default function OrdersPage() {
       fetchOrders(page, searchQuery, activeFilter, startDate, endDate);
     } catch (error) {
       toast.error(error.message || 'Unable to delete order');
+    }
+  };
+
+  const handleSaveOrderNote = async (order) => {
+    const orderId = order?._id;
+    const note = String(noteDrafts?.[orderId] || '').trim();
+
+    if (!orderId) return;
+    if (!note) {
+      toast.error('Please enter a note');
+      return;
+    }
+
+    setSavingNoteOrderId(orderId);
+    try {
+      const response = await fetch('/api/order/set-msg', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId,
+          name: user?.firstname || 'Admin',
+          message: note,
+          time: new Date().toISOString(),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save note');
+      }
+
+      await fetch('/api/order/set-history', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId,
+          name: user?.firstname || 'Admin',
+          message: `Order note updated by ${user?.firstname || 'admin'}`,
+          time: new Date().toISOString(),
+        }),
+      });
+
+      toast.success('Order note saved');
+      fetchOrders(page, searchQuery, activeFilter, startDate, endDate);
+    } catch (error) {
+      toast.error(error?.message || 'Unable to save note');
+    } finally {
+      setSavingNoteOrderId('');
     }
   };
 
@@ -472,6 +529,41 @@ export default function OrdersPage() {
                   {order.orderItems.length > 1 && (
                     <span className={styles.more}>+{order.orderItems.length - 1} more</span>
                   )}
+                </div>
+
+                <div className={styles.noteSection}>
+                  <div className={styles.noteHeader}>
+                    <MessageSquare size={14} />
+                    <span>Note</span>
+                  </div>
+                  {getLatestOrderNote(order) && (
+                    <p className={styles.notePreview}>
+                      Last note: {getLatestOrderNote(order)}
+                    </p>
+                  )}
+                  <div className={styles.noteComposer}>
+                    <input
+                      type="text"
+                      value={noteDrafts?.[order._id] || ''}
+                      onChange={(e) =>
+                        setNoteDrafts((prev) => ({
+                          ...prev,
+                          [order._id]: e.target.value,
+                        }))
+                      }
+                      placeholder="Add note for this order..."
+                      className={styles.noteInput}
+                    />
+                    <button
+                      onClick={() => handleSaveOrderNote(order)}
+                      className={styles.noteSaveBtn}
+                      disabled={savingNoteOrderId === order._id}
+                      title="Save Note"
+                    >
+                      <Save size={13} />
+                      {savingNoteOrderId === order._id ? 'Saving' : 'Save'}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Footer */}

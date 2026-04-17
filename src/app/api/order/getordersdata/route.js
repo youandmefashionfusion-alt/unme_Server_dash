@@ -1,188 +1,158 @@
 import connectDb from "../../../../../config/connectDb";
 import OrderModel from "../../../../../models/orderModel";
-export async function GET(){
-  const currentDate = new Date();
-  currentDate.setDate(1);
-  currentDate.setDate(currentDate.getDate()-1)
-  currentDate.setHours(18,30,0)
-  let d=new Date();
-  let endDate=new Date(d);
-  d.setDate(1)
-  for (let index = 0; index < 11; index++) {
-    d.setMonth(d.getMonth()-1)
-    
-  }
-  // endDate=monthNames[d.getMonth()]+" "+d.getFullYear()
-  d.setMonth(11)
-  d.setDate(30)
-  d.setHours(18,30,0)
-  endDate.setMonth(11)
-  endDate.setDate(30)
-  endDate.setHours(18,29,0)
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
 
-  const startOfDay = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 18, 30, 0); // Start of yesterday
-// Set time to 11:59:59.999 PM IST
-const startOfDayIST = new Date(today);
-  startOfDayIST.setHours(18, 29, 59, 999)
-  const startOfWeek = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay()); 
-  startOfWeek.setHours(18,30,0)// Start of the week (Sunday)
-  const endOfWeek = new Date(today.getFullYear(), today.getMonth(), today.getDate() + (6 - today.getDay())); 
-  endOfWeek.setHours(18,30,0)// End of the week (Saturday)
-  yesterday.setDate(today.getDate() - 2);
-  yesterday.setHours(18, 29, 59, 999)
-  today.setDate(today.getDate() - 1);
-  startOfDayIST.setHours(18, 29, 59, 999)
-  const startOfYear = new Date(new Date().getFullYear(), 0, 1);
-  const endOfYear = new Date(new Date().getFullYear(), 11, 31, 18, 29, 59, 999);
-  await connectDb()
-    const monthdata=await OrderModel.aggregate([
-      {
-        $match:{
-          createdAt:{
-            $lte:new Date(),
-            $gte:currentDate
-          },
-          orderType: { $ne: "Cancelled" } // Exclude orders with the "Cancelled" tag
-  
-        }
-      },{
-        $group: {
-          _id: {
-            month: "$month"
-          },
-          amount: { $sum: "$finalAmount" },
-          count: { $sum: 1 },
-          items: { $push: "$orderItems" } // Accumulate all items in orders
-        }
+const IST_TIMEZONE = "Asia/Kolkata";
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const getISTDateParts = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: IST_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const map = parts.reduce((acc, part) => {
+    if (part.type !== "literal") {
+      acc[part.type] = part.value;
+    }
+    return acc;
+  }, {});
+
+  return {
+    year: Number(map.year),
+    month: Number(map.month),
+    day: Number(map.day),
+  };
+};
+
+const getISTStartOfDayUTC = ({ year, month, day }) =>
+  new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0) - IST_OFFSET_MS);
+
+const shiftRangeByDays = (range, days) => ({
+  start: new Date(range.start.getTime() + days * DAY_MS),
+  end: new Date(range.end.getTime() + days * DAY_MS),
+});
+
+const getTodayRangeIST = () => {
+  const parts = getISTDateParts();
+  const start = getISTStartOfDayUTC(parts);
+  const end = new Date(start.getTime() + DAY_MS - 1);
+  return { start, end };
+};
+
+const getWeekRangeIST = (todayRange) => {
+  const istNow = new Date(Date.now() + IST_OFFSET_MS);
+  const dayOfWeek = istNow.getUTCDay(); // Sunday=0 ... Saturday=6 (in IST-adjusted clock)
+  const start = new Date(todayRange.start.getTime() - dayOfWeek * DAY_MS);
+  const end = new Date(start.getTime() + 7 * DAY_MS - 1);
+  return { start, end };
+};
+
+const getMonthRangeIST = () => {
+  const { year, month } = getISTDateParts();
+  const start = getISTStartOfDayUTC({ year, month, day: 1 });
+  const nextMonthYear = month === 12 ? year + 1 : year;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const nextMonthStart = getISTStartOfDayUTC({
+    year: nextMonthYear,
+    month: nextMonth,
+    day: 1,
+  });
+  const end = new Date(nextMonthStart.getTime() - 1);
+  return { start, end };
+};
+
+const getYearRangeIST = () => {
+  const { year } = getISTDateParts();
+  const start = getISTStartOfDayUTC({ year, month: 1, day: 1 });
+  const nextYearStart = getISTStartOfDayUTC({ year: year + 1, month: 1, day: 1 });
+  const end = new Date(nextYearStart.getTime() - 1);
+  return { start, end };
+};
+
+const NON_CANCELLED_MATCH = {
+  $or: [
+    { orderStatus: { $exists: false } },
+    { orderStatus: null },
+    { orderStatus: { $not: /^cancelled$/i } },
+  ],
+};
+
+const aggregateMetrics = async (range, { amountKey = "totalIncome", countKey = "totalCount" } = {}) => {
+  const [data] = await OrderModel.aggregate([
+    {
+      $match: {
+        createdAt: {
+          $gte: range.start,
+          $lte: range.end,
+        },
+        ...NON_CANCELLED_MATCH,
       },
-      {
-        $project: {
-          _id: 1,
-          amount: 1,
-          count: 1,
-          items: 1,
-          orderItemCount: { $sum: { $size: "$items" } } // Get the count of orderItems
-        }
-      }
-    ])
-    const yeardata=await OrderModel.aggregate([
-        {
-          $match:{
-            createdAt:{ $gte: startOfYear, $lte: endOfYear },
-            orderType: { $ne: "Cancelled" } // Exclude orders with the "Cancelled" tag
-          }
-        },
-        {
-          $group: {
-            _id: null,
-            count: { $sum: 1 },
-            amount: { $sum: "$finalAmount" },
-            items: { $push: "$orderItems" } // Accumulate all items in orders
-          }
-        },
-        {
-          $project: {
-            _id: 1,
-            amount: 1,
-            count: 1,
-            items: 1,
-            orderItemCount: { $sum: { $size: "$items" } } // Get the count of orderItems
-          }
-        }
-      ])
-      const todaydata = await OrderModel.aggregate([
-        {
-          $match: {
-            createdAt: {
-              $gte: startOfDay,
-              $lte: startOfDayIST
-            },
-            orderType: { $ne: "Cancelled" } // Exclude orders with the "Cancelled" tag
-    
-    
-          }
-        },
-        {
-          $group: {
-            _id: null,
-            totalIncome: { $sum: "$finalAmount" },
-            totalCount: { $sum: 1 },
-            items: { $push: "$orderItems" }
-          }
-        },
-        {
-          $project: {
-            _id: 1,
-            totalIncome: 1,
-            totalCount: 1,
-            items: 1,
-            orderItemCount: { $sum: { $size: "$items" } }
-          }
-        }
-      ]);
-      const weekdata = await OrderModel.aggregate([
-        {
-          $match: {
-            createdAt: {
-              $gte: startOfWeek,
-              $lte: endOfWeek
-            },
-            orderType: { $ne: "Cancelled" } // Exclude orders with the "Cancelled" tag
-          }
-        },
-        {
-          $group: {
-            _id: null,
-            totalIncome: { $sum: "$finalAmount" },
-            totalCount: { $sum: 1 },
-            items: { $push: "$orderItems" } // Accumulate all items in orders
-          }
-        },
-        {
-          $project: {
-            _id: 1,
-            totalIncome: 1,
-            totalCount: 1,
-            items: 1,
-            orderItemCount: { $sum: { $size: "$items" } } // Get the count of orderItems
-          }
-        }
-      ]);
-      const yesterdaydata = await OrderModel.aggregate([
-        {
-          $match: {
-            createdAt: {
-              $gte: yesterday,
-              $lte: startOfDay
-            },
-            orderType: { $ne: "Cancelled" } // Exclude orders with the "Cancelled" tag
-    
-          }
-        },
-        {
-          $group: {
-            _id: null,
-            totalIncome: { $sum: "$finalAmount" },
-            totalCount: { $sum: 1 },
-            items: { $push: "$orderItems" } // Accumulate all items in orders
-          }
-        },
-        {
-          $project: {
-            _id: 1,
-            totalIncome: 1,
-            totalCount: 1,
-            items: 1,
-            orderItemCount: { $sum: { $size: "$items" } } // Get the count of orderItems
-          }
-        }
-      ]);
-    
-    return Response.json({
-        monthdata,yeardata,todaydata,weekdata,yesterdaydata
-    })
+    },
+    {
+      $group: {
+        _id: null,
+        totalIncome: { $sum: "$finalAmount" },
+        totalCount: { $sum: 1 },
+        items: { $push: "$orderItems" },
+      },
+    },
+    {
+      $project: {
+        _id: 1,
+        totalIncome: 1,
+        totalCount: 1,
+        items: 1,
+      },
+    },
+  ]);
+
+  if (!data) {
+    return [];
   }
+
+  return [
+    {
+      [amountKey]: data.totalIncome,
+      [countKey]: data.totalCount,
+      items: data.items,
+    },
+  ];
+};
+
+export async function GET() {
+  try {
+    await connectDb();
+
+    const todayRange = getTodayRangeIST();
+    const yesterdayRange = shiftRangeByDays(todayRange, -1);
+    const weekRange = getWeekRangeIST(todayRange);
+    const monthRange = getMonthRangeIST();
+    const yearRange = getYearRangeIST();
+
+    const [todaydata, yesterdaydata, weekdata, monthdata, yeardata] = await Promise.all([
+      aggregateMetrics(todayRange, { amountKey: "totalIncome", countKey: "totalCount" }),
+      aggregateMetrics(yesterdayRange, { amountKey: "totalIncome", countKey: "totalCount" }),
+      aggregateMetrics(weekRange, { amountKey: "totalIncome", countKey: "totalCount" }),
+      aggregateMetrics(monthRange, { amountKey: "amount", countKey: "count" }),
+      aggregateMetrics(yearRange, { amountKey: "totalIncome", countKey: "totalCount" }),
+    ]);
+
+    return Response.json({
+      monthdata,
+      yeardata,
+      todaydata,
+      weekdata,
+      yesterdaydata,
+    });
+  } catch (error) {
+    console.error("Error fetching order metrics:", error);
+    return Response.json(
+      { success: false, message: "Failed to fetch order metrics" },
+      { status: 500 }
+    );
+  }
+}
   

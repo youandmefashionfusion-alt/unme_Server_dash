@@ -1,43 +1,75 @@
 import connectDb from "../../../../../config/connectDb";
 import OrderModel from "../../../../../models/orderModel";
-import ProductModel from "../../../../../models/productModel";
 
 const PREPAID_TYPES = ['prepaid', 'payu', 'online', 'pre-paid'];
+
+const CANCELLED_ORDER_MATCH = {
+  $or: [
+    { _orderTypeNormalized: 'cancelled' },
+    { _orderStatusNormalized: 'cancelled' },
+  ],
+};
+
+const RETURNED_ORDER_MATCH = {
+  $or: [
+    { _orderTypeNormalized: 'returned' },
+    { _orderStatusNormalized: 'returned' },
+  ],
+};
+
+const EXCLUDE_CANCELLED_RETURNED = {
+  $nor: [CANCELLED_ORDER_MATCH, RETURNED_ORDER_MATCH],
+};
 
 function buildFilterQuery(filter) {
   switch (filter) {
     case 'confirmed':
-      return { _orderCalledNormalized: 'called', _orderStatusNormalized: { $ne: 'cancelled' } };
+      return {
+        $and: [
+          { _orderCalledNormalized: 'called' },
+          EXCLUDE_CANCELLED_RETURNED,
+        ],
+      };
     case 'pending':
       return {
-        _orderCalledNormalized: { $ne: 'called' },
-        _orderStatusNormalized: { $nin: ['cancelled', 'fulfilled', 'returned', 'delivered'] },
+        $and: [
+          { _orderCalledNormalized: { $ne: 'called' } },
+          { _orderStatusNormalized: { $nin: ['fulfilled', 'delivered'] } },
+          EXCLUDE_CANCELLED_RETURNED,
+        ],
       };
     case 'fulfilled':
-      return { _orderStatusNormalized: 'fulfilled' };
+      return {
+        $and: [
+          { _orderStatusNormalized: { $in: ['fulfilled', 'delivered'] } },
+          EXCLUDE_CANCELLED_RETURNED,
+        ],
+      };
     case 'cancelled':
-      return {
-        $or: [
-          { _orderTypeNormalized: 'cancelled' },
-          { _orderStatusNormalized: 'cancelled' },
-        ],
-      };
+      return CANCELLED_ORDER_MATCH;
     case 'returned':
+      return RETURNED_ORDER_MATCH;
+    case 'cod':
       return {
-        $or: [
-          { _orderTypeNormalized: 'returned' },
-          { _orderStatusNormalized: 'returned' },
+        $and: [
+          { _orderTypeNormalized: 'cod' },
+          EXCLUDE_CANCELLED_RETURNED,
         ],
       };
-    case 'cod':
-      return { _orderTypeNormalized: 'cod', _orderStatusNormalized: { $ne: 'cancelled' } };
     case 'prepaid':
       return {
-        _orderTypeNormalized: { $in: PREPAID_TYPES },
-        _orderStatusNormalized: { $ne: 'cancelled' },
+        $and: [
+          { _orderTypeNormalized: { $in: PREPAID_TYPES } },
+          EXCLUDE_CANCELLED_RETURNED,
+        ],
       };
     case 'arriving':
-      return { _orderStatusNormalized: 'arriving' };
+      return {
+        $and: [
+          { _orderStatusNormalized: { $regex: /^arriving/i } },
+          EXCLUDE_CANCELLED_RETURNED,
+        ],
+      };
     default:
       return {};
   }

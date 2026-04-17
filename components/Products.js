@@ -68,7 +68,7 @@ const ProductsPage = () => {
 
       // Get filename from Content-Disposition header
       const contentDisposition = response.headers.get('Content-Disposition');
-      let filename = 'products.xlsx';
+      let filename = 'products-catalog.csv';
       if (contentDisposition) {
         const match = contentDisposition.match(/filename="?([^"]+)"?/);
         if (match) filename = match[1];
@@ -81,7 +81,7 @@ const ProductsPage = () => {
 
       toast.success('Export started');
     } catch (err) {
-      toast.error(err.message || 'Failed to export orders');
+      toast.error(err.message || 'Failed to export products');
     }
   };
   return (

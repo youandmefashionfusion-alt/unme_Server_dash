@@ -36,6 +36,7 @@ import {
   resolveOrderCodCharge,
   resolveOrderGiftWrapTotal,
 } from "../../../lib/orderPricing";
+import { isRestrictedAdmin } from "../../../lib/restrictedAdmin";
 
 export default function OrderDetailPage() {
   const params = useParams();
@@ -43,11 +44,7 @@ export default function OrderDetailPage() {
   const orderId = params.id;
   const { user } = useSelector((state) => state.auth);
   const { updateOrderStatus } = useOrders();
-  const normalize = (value) => String(value || "").trim().toLowerCase();
-  const canDeleteOrders =
-    normalize(user?.mobile) === "9719250693" &&
-    normalize(user?.firstname) === "ujjawal" &&
-    normalize(user?.email) === "ujjawal@codexae.com";
+  const canDeleteOrders = isRestrictedAdmin(user);
 
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
