@@ -2,6 +2,14 @@ import connectDb from "../../../../../config/connectDb";
 import OrderModel from "../../../../../models/orderModel";
 
 const PREPAID_TYPES = ['prepaid', 'payu', 'online', 'pre-paid'];
+const toNumberExpr = (value) => ({
+  $convert: {
+    input: value,
+    to: 'double',
+    onError: 0,
+    onNull: 0,
+  },
+});
 
 const CANCELLED_ORDER_MATCH = {
   $or: [
@@ -52,14 +60,14 @@ function buildFilterQuery(filter) {
     case 'cod':
       return {
         $and: [
-          { _orderTypeNormalized: 'cod' },
+          { _isCodResolved: true },
           EXCLUDE_CANCELLED_RETURNED,
         ],
       };
     case 'prepaid':
       return {
         $and: [
-          { _orderTypeNormalized: { $in: PREPAID_TYPES } },
+          { _isPrepaidResolved: true },
           EXCLUDE_CANCELLED_RETURNED,
         ],
       };
@@ -138,6 +146,56 @@ export async function GET(request) {
           _orderCalledNormalized: {
             $toLower: { $trim: { input: { $ifNull: ['$orderCalled', ''] } } },
           },
+          _razorpayOrderIdNormalized: {
+            $toLower: { $trim: { input: { $ifNull: ['$paymentInfo.razorpayOrderId', ''] } } },
+          },
+          _razorpayPaymentIdNormalized: {
+            $toLower: { $trim: { input: { $ifNull: ['$paymentInfo.razorpayPaymentId', ''] } } },
+          },
+          _paymentIdNormalized: {
+            $toLower: { $trim: { input: { $ifNull: ['$paymentInfo.paymentId', ''] } } },
+          },
+          _finalAmountNumeric: toNumberExpr('$finalAmount'),
+          _razorpayAmountPaiseNumeric: toNumberExpr('$paymentInfo.razorpayAmountPaise'),
+        },
+      },
+      {
+        $addFields: {
+          _isCodResolved: {
+            $or: [
+              { $eq: ['$_orderTypeNormalized', 'cod'] },
+              { $eq: ['$_razorpayOrderIdNormalized', 'cod'] },
+              { $eq: ['$_razorpayPaymentIdNormalized', 'cod'] },
+              { $eq: ['$_paymentIdNormalized', 'cod'] },
+            ],
+          },
+        },
+      },
+      {
+        $addFields: {
+          _isPrepaidResolved: {
+            $and: [
+              { $eq: ['$_isCodResolved', false] },
+              {
+                $or: [
+                  { $in: ['$_orderTypeNormalized', PREPAID_TYPES] },
+                  { $gt: ['$_razorpayAmountPaiseNumeric', 0] },
+                ],
+              },
+            ],
+          },
+          _effectiveFinalAmount: {
+            $cond: [
+              {
+                $and: [
+                  { $eq: ['$_isPrepaidResolved', true] },
+                  { $gt: ['$_razorpayAmountPaiseNumeric', 0] },
+                ],
+              },
+              { $divide: ['$_razorpayAmountPaiseNumeric', 100] },
+              '$_finalAmountNumeric',
+            ],
+          },
         },
       },
       {
@@ -145,6 +203,7 @@ export async function GET(request) {
           // Paginated orders with product population
           orders: [
             { $match: filterQuery }, // apply the selected filter
+            { $addFields: { finalAmount: '$_effectiveFinalAmount' } },
             { $sort: { createdAt: -1 } },
             { $skip: skip },
             { $limit: limit },
@@ -192,6 +251,14 @@ export async function GET(request) {
                 _orderTypeNormalized: 0,
                 _orderStatusNormalized: 0,
                 _orderCalledNormalized: 0,
+                _razorpayOrderIdNormalized: 0,
+                _razorpayPaymentIdNormalized: 0,
+                _paymentIdNormalized: 0,
+                _finalAmountNumeric: 0,
+                _razorpayAmountPaiseNumeric: 0,
+                _isCodResolved: 0,
+                _isPrepaidResolved: 0,
+                _effectiveFinalAmount: 0,
               },
             },
           ],
@@ -203,35 +270,35 @@ export async function GET(request) {
           // Stats for each filter type (count + total finalAmount)
           confirmed: [
             { $match: confirmedFilter },
-            { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$finalAmount' } } },
+            { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$_effectiveFinalAmount' } } },
           ],
           pending: [
             { $match: pendingFilter },
-            { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$finalAmount' } } },
+            { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$_effectiveFinalAmount' } } },
           ],
           fulfilled: [
             { $match: fulfilledFilter },
-            { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$finalAmount' } } },
+            { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$_effectiveFinalAmount' } } },
           ],
           cancelled: [
             { $match: cancelledFilter },
-            { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$finalAmount' } } },
+            { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$_effectiveFinalAmount' } } },
           ],
           returned: [
             { $match: returnedFilter },
-            { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$finalAmount' } } },
+            { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$_effectiveFinalAmount' } } },
           ],
           cod: [
             { $match: codFilter },
-            { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$finalAmount' } } },
+            { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$_effectiveFinalAmount' } } },
           ],
           prepaid: [
             { $match: prepaidFilter },
-            { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$finalAmount' } } },
+            { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$_effectiveFinalAmount' } } },
           ],
           arriving: [
             { $match: arrivingFilter },
-            { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$finalAmount' } } },
+            { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$_effectiveFinalAmount' } } },
           ],
         },
       },

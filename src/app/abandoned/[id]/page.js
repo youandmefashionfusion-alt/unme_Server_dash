@@ -329,6 +329,12 @@ const SingleAbandonedPage = () => {
     return Number.isFinite(parsed) ? parsed : 0;
   };
 
+  const getItemUnitPrice = (item) => {
+    const directPrice = toFiniteNumber(item?.price);
+    if (directPrice > 0) return directPrice;
+    return toFiniteNumber(item?.product?.price);
+  };
+
   if (loading) {
     return (
       <div className={styles.loading}>
@@ -353,7 +359,7 @@ const SingleAbandonedPage = () => {
 
   const resolvedOrderItems = Array.isArray(order?.orderItems) ? order.orderItems : [];
   const subtotal = resolvedOrderItems.reduce(
-    (sum, item) => sum + toFiniteNumber(item?.quantity) * toFiniteNumber(item?.price),
+    (sum, item) => sum + toFiniteNumber(item?.quantity) * getItemUnitPrice(item),
     0
   );
   const hasGiftWrap = resolvedOrderItems.some((item) => Boolean(item?.giftWrap));
@@ -481,7 +487,7 @@ const SingleAbandonedPage = () => {
                     <h4>{item?.product?.title}</h4>
                     <p className={styles.itemSku}>SKU: {item?.product?.sku || item?.sku || 'N/A'}</p>
                     <div className={styles.itemMeta}>
-                      <span className={styles.itemPrice}>₹{item.price}</span>
+                      <span className={styles.itemPrice}>₹{getItemUnitPrice(item)}</span>
                       <span className={styles.itemQty}>Qty: {item.quantity}</span>
                     </div>
                     {(item?.giftWrap || item?.isGift) && (
@@ -501,7 +507,7 @@ const SingleAbandonedPage = () => {
                     )}
                   </div>
                   <div className={styles.detailItemTotal}>
-                    ₹{(item.price * item.quantity).toFixed(0)}
+                    ₹{(getItemUnitPrice(item) * toFiniteNumber(item?.quantity)).toFixed(0)}
                   </div>
                 </div>
               ))}
@@ -559,12 +565,12 @@ const SingleAbandonedPage = () => {
               </div>
               <div className={styles.contactRow}>
                 <Phone size={16} />
-                <span>+91 {formData.phone}</span>
+                <span>{formData.phone ? `+91 ${formData.phone}` : 'N/A'}</span>
               </div>
               {formData.mobile && (
                 <div className={styles.contactRow}>
                   <Phone size={16} />
-                  <span>Alt: +91 {formData.mobile}</span>
+                  <span>{`Alt: +91 ${formData.mobile}`}</span>
                 </div>
               )}
             </div>

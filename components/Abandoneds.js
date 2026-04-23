@@ -52,6 +52,15 @@ const formatCurrency = (amount) => {
   const value = Number(amount) || 0;
   return value.toLocaleString('en-IN');
 };
+const getItemUnitPrice = (item) => {
+  const directPrice = Number(item?.price);
+  if (Number.isFinite(directPrice) && directPrice > 0) return directPrice;
+
+  const productPrice = Number(item?.product?.price);
+  if (Number.isFinite(productPrice) && productPrice > 0) return productPrice;
+
+  return 0;
+};
 const formatDate = (value) =>
   new Date(value).toLocaleDateString('en-IN', {
     day: 'numeric',
@@ -348,14 +357,14 @@ const Abandoned = () => {
                 </div>
 
                 <div className={styles.customer}>
-                  <h4>{order.shippingInfo?.firstname} {order.shippingInfo?.lastname}</h4>
+                  <h4>{String(`${order.shippingInfo?.firstname || ''} ${order.shippingInfo?.lastname || ''}`).trim() || 'Guest Customer'}</h4>
                   <div className={styles.contact}>
                     <Mail size={12} />
                     <span>{order.shippingInfo?.email || 'N/A'}</span>
                   </div>
                   <div className={styles.contact}>
                     <Phone size={12} />
-                    <span>+91 {order.shippingInfo?.phone || 'N/A'}</span>
+                    <span>{order.shippingInfo?.phone ? `+91 ${order.shippingInfo.phone}` : 'N/A'}</span>
                   </div>
                 </div>
 
@@ -373,7 +382,7 @@ const Abandoned = () => {
                       )}
                       <div>
                         <p className={styles.previewTitle}>{item?.product?.title || 'Product removed'}</p>
-                        <p className={styles.previewQty}>Qty: {item.quantity} x Rs.{formatCurrency(item.price)}</p>
+                        <p className={styles.previewQty}>Qty: {item.quantity} x Rs.{formatCurrency(getItemUnitPrice(item))}</p>
                         {(item?.giftWrap || item?.isGift) && (
                           <div className={styles.previewGiftMeta}>
                             {item?.giftWrap && (
@@ -436,7 +445,7 @@ const Abandoned = () => {
                 <div className={styles.cardFooter}>
                   <div className={styles.totalWrap}>
                     <span className={styles.label}>Total</span>
-                    <span className={styles.amount}>Rs.{formatCurrency(order.finalAmount)}</span>
+                    <span className={styles.amount}>Rs.{formatCurrency(order.finalAmount || 0)}</span>
                   </div>
                   <div className={styles.actions}>
                     <Link href={`/abandoned/${order._id}`} className={styles.viewBtn}>

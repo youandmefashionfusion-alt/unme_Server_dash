@@ -20,12 +20,28 @@ export const checkAuthStatus = createAsyncThunk(
       headers,
       credentials: 'include',
     });
-    
+
+    const session = await response.json().catch(() => ({}));
+
     if (!response.ok) {
-      throw new Error('Session check failed');
+      if (
+        typeof window !== 'undefined' &&
+        [401, 403, 404].includes(response.status)
+      ) {
+        localStorage.removeItem('adminAuthToken');
+        localStorage.removeItem('userData');
+      }
+
+      if ([401, 403, 404].includes(response.status)) {
+        return {
+          user: null,
+          isAuthenticated: false,
+          error: session?.error || 'Session expired',
+        };
+      }
+
+      throw new Error(session?.error || 'Session check failed');
     }
-    
-    const session = await response.json();
 
     if (typeof window !== 'undefined' && session?.user?.token) {
       localStorage.setItem('adminAuthToken', session.user.token);
@@ -41,12 +57,13 @@ export const loginUser = createAsyncThunk(
   'auth/login',
   async ({ mobile, password }, { rejectWithValue }) => {
     try {
+      const normalizedMobile = String(mobile || '').replace(/\D/g, '').slice(-10);
       const response = await fetch('/api/user/admin-login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ mobile, password }),
+        body: JSON.stringify({ mobile: normalizedMobile, password }),
       });
 
       const data = await response.json();

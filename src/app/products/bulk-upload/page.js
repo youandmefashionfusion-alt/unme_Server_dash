@@ -54,6 +54,82 @@ const BulkUploadPage = () => {
     return fallback;
   }, []);
 
+  const normalizeHeader = useCallback((header) => {
+    return String(header || '')
+      .replace(/^\uFEFF/, '')
+      .trim()
+      .toLowerCase();
+  }, []);
+
+  const normalizeRow = useCallback((row) => {
+    const normalized = {};
+    Object.entries(row || {}).forEach(([key, value]) => {
+      normalized[normalizeHeader(key)] = value;
+    });
+    return normalized;
+  }, [normalizeHeader]);
+
+  const getFirstValue = useCallback((row, keys = []) => {
+    for (const key of keys) {
+      const value = row?.[normalizeHeader(key)];
+      if (value === 0 || value === '0') return value;
+      if (value !== undefined && value !== null && String(value).trim() !== '') {
+        return value;
+      }
+    }
+    return '';
+  }, [normalizeHeader]);
+
+  const parseNumeric = useCallback((value) => {
+    if (value === undefined || value === null) return 0;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+
+    const cleaned = String(value)
+      .replace(/[^\d.-]/g, '')
+      .trim();
+    const parsed = parseFloat(cleaned);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }, []);
+
+  const splitList = useCallback((value) => {
+    if (!value && value !== 0) return [];
+    if (Array.isArray(value)) {
+      return value.map((entry) => String(entry || '').trim()).filter(Boolean);
+    }
+    return String(value)
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  }, []);
+
+  const toHtmlDescription = useCallback((value) => {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    if (/<[a-z][\s\S]*>/i.test(text)) return text;
+    return `<p>${text}</p>`;
+  }, []);
+
+  const collectImageUrls = useCallback((row) => {
+    const urls = [];
+
+    for (let i = 1; i <= 10; i += 1) {
+      const main = getFirstValue(row, [`image link ${i}`, `image_link_${i}`]);
+      const creative = getFirstValue(row, [
+        `image link ${i} (creative)`,
+        `image_link_${i}_creative`,
+      ]);
+      if (main) urls.push(String(main).trim());
+      if (creative) urls.push(String(creative).trim());
+    }
+
+    const primaryImage = getFirstValue(row, ['image link', 'image_link']);
+    if (primaryImage) {
+      urls.push(String(primaryImage).trim());
+    }
+
+    return [...new Set(urls.filter(Boolean))];
+  }, [getFirstValue]);
+
   // Upload image URL to S3 via backend
   const uploadImageToS3 = useCallback(async (imageUrl) => {
     try {
@@ -101,55 +177,74 @@ const BulkUploadPage = () => {
           const worksheet = workbook.Sheets[sheetName];
           const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-          const parsed = jsonData.map((row, index) => {
-            // Collect images
-            const images = [];
-            for (let i = 1; i <= 10; i++) {
-              const mainKey = `Image Link ${i}`;
-              const creativeKey = `Image Link ${i} (Creative)`;
-              if (row[mainKey]) images.push(row[mainKey]);
-              if (row[creativeKey]) images.push(row[creativeKey]);
-            }
+          const parsed = jsonData.map((rawRow, index) => {
+            const row = normalizeRow(rawRow);
+            const images = collectImageUrls(row);
 
             // Generate SKU if not provided
-            let sku = row['SKU'];
+            let sku = getFirstValue(row, ['sku', 'id']);
             if (!sku) {
               sku = `PRD-${Date.now().toString().slice(-6)}-${index + 1}`;
             }
 
-            const rawSizes = row['Sizes'] ?? row['Ring Size'] ?? '';
+            const rawSizes = getFirstValue(row, ['sizes', 'ring size', 'size']);
 
             const parsedState = normalizeProductState(
-              row['State'] ?? row['Status'] ?? row['Product Status'],
+              getFirstValue(row, ['state', 'status', 'product status']),
               defaultProductState
             );
 
+            const regularPrice = parseNumeric(getFirstValue(row, ['price']));
+            const explicitCrossPrice = parseNumeric(
+              getFirstValue(row, ['cross price'])
+            );
+            const salePrice = parseNumeric(getFirstValue(row, ['sale_price', 'sale price']));
+
+            const hasSalePrice = salePrice > 0;
+            const finalPrice = hasSalePrice ? salePrice : regularPrice;
+            const finalCrossPrice = hasSalePrice
+              ? regularPrice
+              : explicitCrossPrice > finalPrice
+                ? explicitCrossPrice
+                : 0;
+
+            const quantity = Math.round(
+              parseNumeric(getFirstValue(row, ['quantity', 'quantity_to_sell_on_facebook']))
+            );
+            const typeFromFeed = splitList(getFirstValue(row, ['product_tags[1]', 'style[0]', 'type']));
+            const collectionHandleFromFeed = getFirstValue(row, ['product_tags[0]', 'collectionhandle', 'collection handle']);
+
             return {
-              title: row['Product Title']?.trim() || '',
-              description: `<p>${row['Description'] || ''}</p>`,
-              price: parseFloat(row['Price']) || 0,
-              crossPrice: parseFloat(row['Cross Price']) || 0,
-              quantity: parseInt(row['Quantity']) || 0,
-              gender: row['Gender']?.toLowerCase() || 'unisex',
-              color: row['Color'] ? row['Color'].split(',').map(c => c.trim()).filter(Boolean) : [],
-              material: row['Material'] ? row['Material'].split(',').map(m => m.trim()).filter(Boolean) : [],
-              type: row['Type'] ? row['Type'].split(',').map(t => t.trim()).filter(Boolean) : [],
-              necklaceType: row['Necklace Type'] ? row['Necklace Type'].split(',').map(n => n.trim()).filter(Boolean) : [],
-              ringDesign: row['Ring Design'] ? row['Ring Design'].split(',').map(r => r.trim()).filter(Boolean) : [],
+              title: String(getFirstValue(row, ['product title', 'title', 'name']) || '').trim(),
+              description: toHtmlDescription(
+                getFirstValue(row, ['description', 'body_html', 'meta description'])
+              ),
+              price: finalPrice || 0,
+              crossPrice: finalCrossPrice || 0,
+              quantity: Number.isFinite(quantity) ? Math.max(quantity, 0) : 0,
+              gender: String(getFirstValue(row, ['gender']) || 'unisex').toLowerCase(),
+              color: splitList(getFirstValue(row, ['color'])),
+              material: splitList(getFirstValue(row, ['material'])),
+              type: splitList(getFirstValue(row, ['type'])).length
+                ? splitList(getFirstValue(row, ['type']))
+                : typeFromFeed,
+              necklaceType: splitList(getFirstValue(row, ['necklace type'])),
+              ringDesign: splitList(getFirstValue(row, ['ring design'])),
               sizes: rawSizes
                 ? String(rawSizes).split(',').map(r => r.trim()).filter(Boolean)
                 : [],
               imageUrls: images.filter(Boolean),
               sku,
               state: parsedState,
+              collectionHandleFromFeed: String(collectionHandleFromFeed || '').trim(),
               bossPicks: false,
               gatawayJewels: false,
               isFeatured: false,
               is999Sale: false,
               is899Sale: false,
               is1499Sale: false,
-              metaTitle: row['Meta Title'] || row['Product Title'] || '',
-              metaDesc: row['Meta Description'] || row['Description'] || '',
+              metaTitle: getFirstValue(row, ['meta title', 'title', 'product title']) || '',
+              metaDesc: getFirstValue(row, ['meta description', 'description']) || '',
             };
           });
 
@@ -162,7 +257,16 @@ const BulkUploadPage = () => {
       reader.onerror = reject;
       reader.readAsArrayBuffer(file);
     });
-  }, [defaultProductState, normalizeProductState]);
+  }, [
+    collectImageUrls,
+    defaultProductState,
+    getFirstValue,
+    normalizeProductState,
+    normalizeRow,
+    parseNumeric,
+    splitList,
+    toHtmlDescription,
+  ]);
 
   // Handle file selection
   const handleFileChange = async (e) => {
@@ -254,6 +358,7 @@ const BulkUploadPage = () => {
           images: uploadedImages,
         };
         delete productData.imageUrls;
+        delete productData.collectionHandleFromFeed;
 
         // Create product
         const res = await fetch(`/api/products/create-product?token=${user.token}`, {

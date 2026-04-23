@@ -1,6 +1,7 @@
 import connectDb from "../../../../../config/connectDb"
 import AbondendModel from "../../../../../models/abandonedModel"
-import ProductModel from "../../../../../models/productModel"
+import "../../../../../models/productModel";
+import { normalizeAbandonedOrder } from "../../../../lib/abandonedOrder";
 export async function GET(request){
     const {searchParams}=new URL(request.url)
     const id = searchParams.get("id")
@@ -9,7 +10,7 @@ export async function GET(request){
       await connectDb()
       const order=await AbondendModel.findById(id).populate("orderItems.product")
       if(order){
-        return Response.json(order)
+        return Response.json(normalizeAbandonedOrder(order))
       }
      else{
         return Response.json({status:400,message:"Unable to get order"})

@@ -6,6 +6,46 @@ import ProductSearch from '../../../../components/ProductSearch';
 import styles from '../orders.module.css';
 import toast from 'react-hot-toast';
 
+const toPaise = (value) => Math.max(Math.round((Number(value) || 0) * 100), 0);
+
+const buildRazorpayLineItems = (items = []) => {
+  if (!Array.isArray(items)) return [];
+
+  return items
+    .map((item, index) => {
+      const product = item?.product || {};
+      const quantity = Math.max(Number(item?.quantity) || 1, 1);
+      const unitPricePaise = toPaise(product?.price);
+
+      if (!unitPricePaise) return null;
+
+      const safeSku = String(product?.sku || `sku-${index + 1}`).slice(0, 64);
+      const safeName = String(product?.title || 'Product').slice(0, 255);
+      const safeDescription = String(product?.title || 'Dashboard order item').slice(0, 255);
+      const productUrl = product?.handle
+        ? `https://unmejewels.com/products/${product.handle}`
+        : undefined;
+      const imageUrl =
+        product?.images?.[0]?.url ||
+        product?.images?.[0]?.secure_url ||
+        product?.images?.[0]?.src ||
+        undefined;
+
+      return {
+        sku: safeSku,
+        variant_id: String(product?._id || safeSku).slice(0, 64),
+        price: unitPricePaise,
+        offer_price: unitPricePaise,
+        quantity,
+        name: safeName,
+        description: safeDescription,
+        ...(productUrl ? { product_url: productUrl } : {}),
+        ...(imageUrl ? { image_url: imageUrl } : {}),
+      };
+    })
+    .filter(Boolean);
+};
+
 export default function CreateOrderPage() {
   const router = useRouter();
   const {
@@ -24,45 +64,98 @@ export default function CreateOrderPage() {
     if (!validate()) return;
 
     try {
+      const orderItemsPayload = formData.orderItems.map((item) => ({
+        product: item?.product?._id,
+        quantity: item?.quantity,
+        price: item?.product?.price,
+        isGift: Boolean(item?.isGift),
+        giftWrap: Boolean(item?.giftWrap),
+        giftWrapCharge: item?.giftWrap ? Number(item?.giftWrapCharge || 69) : 0,
+        giftMessage: item?.isGift ? String(item?.giftMessage || '') : '',
+      }));
+
+      const basePayload = {
+        ...formData,
+        orderItems: orderItemsPayload,
+        codCharge: formData.orderType === 'COD' ? Number(formData.codCharge || 0) : 0,
+        totalPrice: totals.subtotal,
+        giftWrapTotal: totals.giftWrapTotal,
+        finalAmount: totals.total,
+      };
+
+      let orderPayload = { ...basePayload };
+
+      if (formData.orderType === 'Prepaid') {
+        const lineItems = buildRazorpayLineItems(formData.orderItems);
+        const lineItemsTotalPaise = lineItems.reduce(
+          (sum, item) => sum + Number(item.offer_price || 0) * Number(item.quantity || 1),
+          0
+        );
+
+        const razorpayResponse = await fetch('/api/razorpay/create-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount: totals.total,
+            currency: 'INR',
+            receipt: `dash_${Date.now()}`,
+            notes: {
+              source: 'dashboard',
+              flow: 'orders-create',
+              customerPhone: String(formData?.shippingInfo?.phone || ''),
+            },
+            line_items_total: lineItemsTotalPaise,
+            line_items: lineItems,
+          }),
+        });
+
+        const razorpayData = await razorpayResponse.json().catch(() => ({}));
+        if (!razorpayResponse.ok || !razorpayData?.success || !razorpayData?.order?.id) {
+          throw new Error(razorpayData?.message || 'Failed to create Razorpay order');
+        }
+
+        const razorpayAmountPaise = Number(razorpayData?.order?.amount) || 0;
+        const resolvedFinalAmount = Number((razorpayAmountPaise / 100).toFixed(2));
+
+        orderPayload = {
+          ...basePayload,
+          finalAmount: resolvedFinalAmount > 0 ? resolvedFinalAmount : totals.total,
+          paymentInfo: {
+            razorpayOrderId: razorpayData.order.id,
+            razorpayPaymentId: razorpayData.order.id,
+            paymentId: razorpayData.order.id,
+            razorpayAmountPaise,
+            lineItemsTotalPaise: Number(razorpayData?.order?.line_items_total || 0),
+            currency: razorpayData?.order?.currency || 'INR',
+            receipt: razorpayData?.order?.receipt || '',
+          },
+        };
+      } else {
+        orderPayload = {
+          ...basePayload,
+          paymentInfo: {
+            razorpayOrderId: 'COD',
+            razorpayPaymentId: 'COD',
+            paymentId: 'COD',
+          },
+        };
+      }
+
       const res = await fetch('/api/order/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          orderItems: formData.orderItems.map((item) => ({
-            product: item?.product?._id,
-            quantity: item?.quantity,
-            price: item?.product?.price,
-            isGift: Boolean(item?.isGift),
-            giftWrap: Boolean(item?.giftWrap),
-            giftWrapCharge: item?.giftWrap ? Number(item?.giftWrapCharge || 69) : 0,
-            giftMessage: item?.isGift ? String(item?.giftMessage || '') : '',
-          })),
-          codCharge: formData.orderType === 'COD' ? Number(formData.codCharge || 0) : 0,
-          totalPrice: totals.subtotal,
-          giftWrapTotal: totals.giftWrapTotal,
-          paymentInfo:
-            formData.orderType === 'COD'
-              ? {
-                  razorpayOrderId: 'COD',
-                  razorpayPaymentId: 'COD',
-                }
-              : {
-                  razorpayOrderId: 'MANUAL',
-                  razorpayPaymentId: 'MANUAL',
-                },
-          finalAmount: totals.total,
-        }),
+        body: JSON.stringify(orderPayload),
       });
 
       if (res.ok) {
         toast.success('Order created');
         router.push('/orders');
       } else {
-        toast.error('Creation failed');
+        const errorData = await res.json().catch(() => ({}));
+        toast.error(errorData?.error || errorData?.message || 'Creation failed');
       }
     } catch (error) {
-      toast.error('Something went wrong');
+      toast.error(error?.message || 'Something went wrong');
     }
   };
 

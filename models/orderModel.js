@@ -75,6 +75,18 @@ var orderSchema = new mongoose.Schema(
       paymentId: {
         type: String,
       },
+      razorpayAmountPaise: {
+        type: Number,
+      },
+      lineItemsTotalPaise: {
+        type: Number,
+      },
+      currency: {
+        type: String,
+      },
+      receipt: {
+        type: String,
+      },
     },
     orderItems: [{
       product: {

@@ -15,6 +15,7 @@ export const config = {
 const BRAND_OWNER_EMAIL = "unmejewels@gmail.com";
 const EXTERNAL_CALL_TIMEOUT_MS = 10000;
 const PREPAID_ORDER_TYPES = new Set(["prepaid", "payu", "online", "pre-paid"]);
+const COD_ORDER_TYPES = new Set(["cod", "cash on delivery", "cashondelivery"]);
 
 const toFiniteNumber = (value) => {
   const parsed = Number(value);
@@ -437,9 +438,24 @@ export async function POST(req) {
   const normalizedTotalPrice = Math.max(toFiniteNumber(totalPrice), 0);
   const normalizedShippingCost = Math.max(toFiniteNumber(shippingCost), 0);
   const normalizedDiscount = Math.max(toFiniteNumber(discount), 0);
+  const requestedOrderType = String(orderType || "").trim().toLowerCase();
+  const paymentTypeHints = [
+    String(paymentInfo?.razorpayOrderId || "").trim().toLowerCase(),
+    String(paymentInfo?.razorpayPaymentId || "").trim().toLowerCase(),
+    String(paymentInfo?.paymentId || "").trim().toLowerCase(),
+  ];
+  const isCodByPaymentInfo = paymentTypeHints.some((value) => value === "cod");
   const normalizedOrderType =
-    String(orderType || "").toUpperCase() === "COD" ? "COD" : "Prepaid";
+    COD_ORDER_TYPES.has(requestedOrderType) || isCodByPaymentInfo ? "COD" : "Prepaid";
   const normalizedGiftWrapTotal = calculateGiftWrapTotal(sanitizedOrderItems);
+  const normalizedRazorpayAmountPaise = Math.max(
+    toFiniteNumber(paymentInfo?.razorpayAmountPaise ?? paymentInfo?.amount),
+    0
+  );
+  const normalizedLineItemsTotalPaise = Math.max(
+    toFiniteNumber(paymentInfo?.lineItemsTotalPaise ?? paymentInfo?.line_items_total),
+    0
+  );
   const requestedCodCharge = Math.max(toFiniteNumber(codCharge), 0);
   const inferredCodCharge = Math.max(
     toFiniteNumber(finalAmount) -
@@ -464,18 +480,33 @@ export async function POST(req) {
     ...(paymentInfo?.paymentId
       ? { paymentId: String(paymentInfo.paymentId).trim() }
       : {}),
+    ...(normalizedRazorpayAmountPaise > 0
+      ? { razorpayAmountPaise: normalizedRazorpayAmountPaise }
+      : {}),
+    ...(normalizedLineItemsTotalPaise > 0
+      ? { lineItemsTotalPaise: normalizedLineItemsTotalPaise }
+      : {}),
+    ...(paymentInfo?.currency
+      ? { currency: String(paymentInfo.currency).trim().toUpperCase() }
+      : {}),
+    ...(paymentInfo?.receipt
+      ? { receipt: String(paymentInfo.receipt).trim() }
+      : {}),
   };
-  const resolvedFinalAmount =
+  const computedFinalAmount =
     normalizedTotalPrice +
     normalizedGiftWrapTotal +
     normalizedShippingCost +
     normalizedCodCharge -
     normalizedDiscount;
+  const resolvedFinalAmount =
+    normalizedOrderType === "Prepaid" && normalizedRazorpayAmountPaise > 0
+      ? Number((normalizedRazorpayAmountPaise / 100).toFixed(2))
+      : computedFinalAmount;
 
   try {
     await connectDb();
 
-    const requestedOrderType = String(orderType || "").trim().toLowerCase();
     const isRequestedPrepaid =
       normalizedOrderType === "Prepaid" || PREPAID_ORDER_TYPES.has(requestedOrderType);
     const prepaidTransactionId = String(

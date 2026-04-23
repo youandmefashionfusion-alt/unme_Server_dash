@@ -73,7 +73,7 @@ export async function GET(req) {
           isAuthenticated: false,
           error: "User not found",
         },
-        { status: 404 }
+        { status: 401 }
       );
 
       if (req.cookies.get("adminRefreshToken")) {
@@ -146,13 +146,30 @@ export async function GET(req) {
       { status: 200 }
     );
   } catch (error) {
-    console.error("Session API error:", error);
+    const errorMessage = error?.message || "Internal server error";
+    console.error("Session API error:", errorMessage);
+
+    if (
+      /ECONNREFUSED|ENOTFOUND|querySrv|buffering timed out|server selection|Could not connect/i.test(
+        errorMessage
+      )
+    ) {
+      return NextResponse.json(
+        {
+          user: null,
+          isAuthenticated: false,
+          error: "Database connection failed. Please verify MONGO_URL and Atlas network access.",
+        },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json(
       {
         user: null,
         isAuthenticated: false,
         error: "Internal server error",
-        details: process.env.NODE_ENV === "development" ? error.message : undefined,
+        details: process.env.NODE_ENV === "development" ? errorMessage : undefined,
       },
       { status: 500 }
     );

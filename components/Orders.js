@@ -27,7 +27,27 @@ const PREPAID_ORDER_TYPES = new Set(['prepaid', 'payu', 'online', 'pre-paid']);
 const normalize = (value) => String(value || '').trim().toLowerCase();
 const normalizeOrderType = (value) => String(value || '').trim().toLowerCase();
 const normalizeOrderStatus = (value) => String(value || '').trim().toLowerCase();
-const isPrepaidOrder = (order) => PREPAID_ORDER_TYPES.has(normalizeOrderType(order?.orderType));
+const normalizePaymentMarker = (value) => String(value || '').trim().toLowerCase();
+const formatInrValue = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '0';
+  return numeric.toLocaleString('en-IN', {
+    minimumFractionDigits: Number.isInteger(numeric) ? 0 : 2,
+    maximumFractionDigits: 2,
+  });
+};
+const isCodByPaymentInfo = (order) => {
+  const markers = [
+    normalizePaymentMarker(order?.paymentInfo?.razorpayOrderId),
+    normalizePaymentMarker(order?.paymentInfo?.razorpayPaymentId),
+    normalizePaymentMarker(order?.paymentInfo?.paymentId),
+  ];
+  return markers.includes('cod');
+};
+const isPrepaidOrder = (order) => {
+  if (isCodByPaymentInfo(order)) return false;
+  return PREPAID_ORDER_TYPES.has(normalizeOrderType(order?.orderType));
+};
 const isCancelledOrder = (order) => {
   const orderType = normalizeOrderType(order?.orderType);
   const orderStatus = normalizeOrderStatus(order?.orderStatus);
@@ -35,6 +55,7 @@ const isCancelledOrder = (order) => {
 };
 const getOrderTypeLabel = (order) => {
   if (isCancelledOrder(order)) return 'Cancelled';
+  if (isCodByPaymentInfo(order)) return 'COD';
   if (isPrepaidOrder(order)) return 'Prepaid';
   const normalizedType = normalizeOrderType(order?.orderType);
   if (normalizedType === 'cod') return 'COD';
@@ -409,7 +430,7 @@ export default function OrdersPage() {
           const stats = filters?.[filter.key] || { count: 0, total: 0 };
           const display = filter.key === 'all'
             ? filter.label
-            : `${filter.label} (${stats.count} - ${INR_SYMBOL}${stats.total})`;
+            : `${filter.label} (${stats.count} - ${INR_SYMBOL}${formatInrValue(stats.total)})`;
           return (
             <button
               key={filter.key}
@@ -570,7 +591,7 @@ export default function OrdersPage() {
                 <div className={styles.cardFooter}>
                   <div>
                     <span className={styles.label}>Total</span>
-                    <span className={styles.amount}>{INR_SYMBOL}{order.finalAmount}</span>
+                    <span className={styles.amount}>{INR_SYMBOL}{formatInrValue(order.finalAmount)}</span>
                   </div>
                   <div className={styles.actions}>
                     <Link href={`/orders/${order._id}`} className={styles.viewBtn}>

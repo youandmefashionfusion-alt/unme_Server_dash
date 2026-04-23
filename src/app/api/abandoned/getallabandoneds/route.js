@@ -1,5 +1,7 @@
 import connectDb from "../../../../../config/connectDb";
 import AbondendModel from "../../../../../models/abandonedModel";
+import "../../../../../models/productModel";
+import { normalizeAbandonedOrder } from "../../../../lib/abandonedOrder";
 
 export const config = {
   maxDuration: 10,
@@ -26,10 +28,11 @@ export async function GET(request) {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
+    const normalizedOrders = orders.map((order) => normalizeAbandonedOrder(order));
 
     return Response.json({
       success: true,
-      orders,
+      orders: normalizedOrders,
       currentPage: safePage,
       totalPages,
       totalOrders,

@@ -52,9 +52,14 @@ export default function OrderDetailPage() {
   const [comment, setComment] = useState("");
   const [showTracking, setShowTracking] = useState(false);
   const [tracking, setTracking] = useState({ partner: "", id: "", link: "" });
-  const normalizedOrderType = String(order?.orderType || "").toUpperCase();
-  const isCodOrder = normalizedOrderType === "COD";
-  const isPrepaidOrder = normalizedOrderType === "PREPAID";
+  const normalizedOrderType = String(order?.orderType || "").trim().toUpperCase();
+  const paymentTypeHints = [
+    String(order?.paymentInfo?.razorpayOrderId || "").trim().toUpperCase(),
+    String(order?.paymentInfo?.razorpayPaymentId || "").trim().toUpperCase(),
+    String(order?.paymentInfo?.paymentId || "").trim().toUpperCase(),
+  ];
+  const isCodOrder = normalizedOrderType === "COD" || paymentTypeHints.includes("COD");
+  const isPrepaidOrder = !isCodOrder && normalizedOrderType === "PREPAID";
 
   const copyToClipboard = async (text, label) => {
     try {

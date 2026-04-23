@@ -2,6 +2,7 @@ export const CHECKOUT_FREE_SHIPPING_THRESHOLD = 999;
 export const CHECKOUT_STANDARD_SHIPPING_CHARGE = 99;
 export const CHECKOUT_STANDARD_COD_CHARGE = 99;
 export const CHECKOUT_STANDARD_GIFT_WRAP_CHARGE = 69;
+const PREPAID_ORDER_TYPES = new Set(["PREPAID", "PAYU", "ONLINE", "PRE-PAID"]);
 
 const toFiniteNumber = (value) => {
   const parsed = Number(value);
@@ -23,7 +24,7 @@ export const resolveOrderShippingCost = (order = {}) => {
   }
 
   const subtotal = Math.max(toFiniteNumber(currentOrder.totalPrice), 0);
-  const finalAmount = Math.max(toFiniteNumber(currentOrder.finalAmount), 0);
+  const finalAmount = resolveOrderFinalAmount(currentOrder);
   const discount = Math.max(toFiniteNumber(currentOrder.discount), 0);
   const normalizedOrderType = String(currentOrder.orderType || '').toUpperCase();
 
@@ -54,7 +55,7 @@ export const resolveOrderCodCharge = (order = {}, resolvedShippingCost) => {
   }
 
   const subtotal = Math.max(toFiniteNumber(currentOrder.totalPrice), 0);
-  const finalAmount = Math.max(toFiniteNumber(currentOrder.finalAmount), 0);
+  const finalAmount = resolveOrderFinalAmount(currentOrder);
   const discount = Math.max(toFiniteNumber(currentOrder.discount), 0);
   const shippingCost = Number.isFinite(Number(resolvedShippingCost))
     ? Math.max(toFiniteNumber(resolvedShippingCost), 0)
@@ -96,13 +97,30 @@ export const resolveOrderGiftWrapTotal = (order = {}) => {
   return hasGiftWrap ? CHECKOUT_STANDARD_GIFT_WRAP_CHARGE : 0;
 };
 
+export const resolveOrderFinalAmount = (order = {}) => {
+  const currentOrder = order && typeof order === 'object' ? order : {};
+  const normalizedOrderType = String(currentOrder.orderType || '').toUpperCase();
+
+  const prepaidAmountPaise = hasNumericValue(currentOrder?.paymentInfo?.razorpayAmountPaise)
+    ? Math.max(toFiniteNumber(currentOrder.paymentInfo.razorpayAmountPaise), 0)
+    : 0;
+
+  if (PREPAID_ORDER_TYPES.has(normalizedOrderType) && prepaidAmountPaise > 0) {
+    return Number((prepaidAmountPaise / 100).toFixed(2));
+  }
+
+  return Math.max(toFiniteNumber(currentOrder.finalAmount), 0);
+};
+
 export const normalizeOrderPricing = (order = {}) => {
   const currentOrder = order && typeof order === 'object' ? order : {};
+  const finalAmount = resolveOrderFinalAmount(currentOrder);
   const giftWrapTotal = resolveOrderGiftWrapTotal(currentOrder);
   const shippingCost = resolveOrderShippingCost(currentOrder);
   const codCharge = resolveOrderCodCharge(currentOrder, shippingCost);
   return {
     ...currentOrder,
+    finalAmount,
     giftWrapTotal,
     shippingCost,
     codCharge,

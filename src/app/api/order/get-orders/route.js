@@ -1,4 +1,5 @@
 import OrderModel from "../../../../../models/orderModel"; // Adjust the import path as needed
+import "../../../../../models/productModel";
 import connectDb from "../../../../../config/connectDb";
 export const config = {
   maxDuration: 10,

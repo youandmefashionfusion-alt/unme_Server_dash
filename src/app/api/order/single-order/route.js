@@ -1,4 +1,5 @@
 import OrderModel from "../../../../../models/orderModel";
+import "../../../../../models/productModel";
 import connectDb from "../../../../../config/connectDb";
 import { normalizeOrderPricing } from "../../../../lib/orderPricing";
 
