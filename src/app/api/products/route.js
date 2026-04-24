@@ -1,5 +1,7 @@
 import ProductModel from "../../../../models/productModel";
 import connectDb from "../../../../config/connectDb";
+import CollectionModel from "../../../../models/collectionModel";
+import mongoose from "mongoose";
 
 export const config = {
   maxDuration: 20,
@@ -17,9 +19,45 @@ export async function GET(request) {
       query.state = stateParam;
     }
 
-    // Filtering by collectionHandle
-    if (searchParams.get("collectionHandle")) {
-      query.collectionHandle = searchParams.get("collectionHandle");
+    // Filtering by collection (supports current and legacy mappings).
+    const collectionHandleParam = (searchParams.get("collectionHandle") || "").trim();
+    const collectionIdParam = (searchParams.get("collectionId") || "").trim();
+    if (collectionHandleParam || collectionIdParam) {
+      const collectionFilters = [];
+
+      if (collectionHandleParam) {
+        // Current mapping
+        collectionFilters.push({ collectionHandle: collectionHandleParam });
+        // Legacy mapping where collectionName was stored as handle string.
+        collectionFilters.push({ collectionName: collectionHandleParam });
+      }
+
+      if (collectionIdParam && mongoose.Types.ObjectId.isValid(collectionIdParam)) {
+        collectionFilters.push({
+          collectionName: new mongoose.Types.ObjectId(collectionIdParam),
+        });
+      } else if (collectionHandleParam) {
+        const matchedCollection = await CollectionModel.findOne({
+          handle: collectionHandleParam,
+        })
+          .select("_id")
+          .lean();
+
+        if (matchedCollection?._id) {
+          collectionFilters.push({ collectionName: matchedCollection._id });
+        }
+      }
+
+      const dedupedCollectionFilters = collectionFilters.filter(
+        (filter, index, arr) =>
+          arr.findIndex((entry) => JSON.stringify(entry) === JSON.stringify(filter)) === index
+      );
+
+      if (dedupedCollectionFilters.length === 1) {
+        Object.assign(query, dedupedCollectionFilters[0]);
+      } else if (dedupedCollectionFilters.length > 1) {
+        query.$or = dedupedCollectionFilters;
+      }
     }
 
     // Search functionality
@@ -60,12 +98,14 @@ export async function GET(request) {
     const limit = parseInt(searchParams.get("limit")) || 16;
     const skip = (page - 1) * limit;
 
-    // Total documents count
-    const totalDocs = await ProductModel.countDocuments(query);
+    // Total documents count (raw Mongo driver to avoid ObjectId cast issues
+    // on legacy collectionName string values).
+    const totalDocs = await ProductModel.collection.countDocuments(query);
     const totalPages = Math.ceil(totalDocs / limit);
 
-    // Aggregation pipeline with collectionName populated
-    let productQuery = ProductModel.aggregate([
+    // Aggregation pipeline with collectionName populated (raw driver path
+    // so mixed legacy types in collectionName do not fail casting).
+    const pipeline = [
       { $match: query },
 
       // Lookup to populate collection details
@@ -92,14 +132,15 @@ export async function GET(request) {
             $cond: { if: { $eq: [{ $sum: "$quantity" }, 0] }, then: 1, else: 0 },
           },
           collectionTitle: "$collectionName.title",      // add readable name
-          collectionHandle: "$collectionName.handle",    // add handle
+          // Prefer product-level handle; fall back to looked-up collection handle.
+          collectionHandle: { $ifNull: ["$collectionHandle", "$collectionName.handle"] },
         },
       },
 
       { $sort: { isSoldOut: 1, ...sortCriteria } },
       { $skip: skip },
       { $limit: limit },
-    ]);
+    ];
 
     // Field projection (optional)
     if (searchParams.get("fields")) {
@@ -110,10 +151,10 @@ export async function GET(request) {
           acc[field.trim()] = 1;
           return acc;
         }, {});
-      productQuery = productQuery.project(fields);
+      pipeline.push({ $project: fields });
     }
 
-    const products = await productQuery;
+    const products = await ProductModel.collection.aggregate(pipeline).toArray();
 
     return Response.json(
       {

@@ -87,7 +87,7 @@ const CollectionDetail = () => {
                     images: data.images || [],
                     order: data.order || 0
                 })
-                if (data.handle) fetchProducts(data.handle)
+                if (data.handle) fetchProducts(data.handle, collectionId)
             } else {
                 toast.error('Collection not found')
                 router.push('/collections')
@@ -100,10 +100,17 @@ const CollectionDetail = () => {
         }
     }
 
-    const fetchProducts = async (handle) => {
+    const fetchProducts = async (handle, currentCollectionId) => {
         try {
             setProductsLoading(true)
-            const response = await fetch(`/api/products?collectionHandle=${handle}&limit=10000`)
+            const params = new URLSearchParams({
+                collectionHandle: handle,
+                limit: '10000',
+            })
+            if (currentCollectionId) {
+                params.set('collectionId', currentCollectionId)
+            }
+            const response = await fetch(`/api/products?${params.toString()}`)
             const data = await response.json()
             if (response.ok) {
                 setProducts(data.products || [])
