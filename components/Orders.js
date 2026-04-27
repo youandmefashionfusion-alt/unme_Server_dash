@@ -1,8 +1,8 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Search, Calendar, MapPin, Phone, Package, X, Check, Download, Trash2, Gift, MessageSquare, Save } from 'lucide-react';
+import { Plus, Search, Calendar, MapPin, Phone, Package, X, Check, Download, Trash2, Gift, MessageSquare, Save, Upload } from 'lucide-react';
 import { useOrders } from '../controller/useOrders';
 import styles from '../src/app/orders/orders.module.css';
 import filterStyles from '../src/app/orders/orderFilters.module.css';
@@ -82,8 +82,10 @@ export default function OrdersPage() {
   const [fromOrder, setFromOrder] = useState('');
   const [toOrder, setToOrder] = useState('');
   const [exportLoading, setExportLoading] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
   const [noteDrafts, setNoteDrafts] = useState({});
   const [savingNoteOrderId, setSavingNoteOrderId] = useState('');
+  const importInputRef = useRef(null);
   const { orders, loading, pagination, fetchOrders, updateOrderStatus, filters } = useOrders();
   const { user } = useSelector((state) => state.auth);
   const canDeleteOrders = isRestrictedAdmin(user);
@@ -299,6 +301,54 @@ export default function OrdersPage() {
 
   // Active filter label for result count display
   const activeFilterLabel = FILTERS.find((f) => f.key === activeFilter)?.label || 'All';
+
+  const openImportPicker = () => {
+    if (importLoading) return;
+    importInputRef.current?.click();
+  };
+
+  const handleImportOrders = async (event) => {
+    const file = event?.target?.files?.[0];
+    if (!file) return;
+
+    if (!user?.token) {
+      toast.error('Authentication required to import orders');
+      event.target.value = '';
+      return;
+    }
+
+    setImportLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch(`/api/order/import-orders?token=${encodeURIComponent(user.token)}`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || data?.message || 'Failed to import orders');
+      }
+
+      const createdCount = Number(data?.createdCount || 0);
+      const skippedCount = Number(data?.skippedCount || 0);
+      const failedCount = Number(data?.failedCount || 0);
+
+      toast.success(
+        `Import complete: ${createdCount} created, ${skippedCount} skipped, ${failedCount} failed`
+      );
+
+      fetchOrders(page, searchQuery, activeFilter, startDate, endDate);
+    } catch (error) {
+      toast.error(error?.message || 'Import failed');
+    } finally {
+      setImportLoading(false);
+      event.target.value = '';
+    }
+  };
+
   const handleExport = async () => {
     if (!fromOrder.trim() || !toOrder.trim()) {
       toast.error('Please enter both from and to order numbers');
@@ -373,6 +423,10 @@ export default function OrdersPage() {
           <p className={styles.subtitle}>Manage and track customer orders</p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
+          <button className={styles.secondaryBtn} onClick={openImportPicker} disabled={importLoading}>
+            <Upload size={18} />
+            {importLoading ? 'Importing...' : 'Import Orders'}
+          </button>
           <button className={styles.secondaryBtn} onClick={() => setShowExportModal(true)}>
             <Download size={18} />
             Export
@@ -382,6 +436,13 @@ export default function OrdersPage() {
             New Order
           </Link>
         </div>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".xlsx,.xls,.csv"
+          style={{ display: 'none' }}
+          onChange={handleImportOrders}
+        />
       </div>
 
       <div className={styles.searchContainer}>

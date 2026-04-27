@@ -49,7 +49,7 @@ const countItems = (items) => {
 const metricFromBucket = (bucket) => ({
   revenue: toNumber(bucket?.totalIncome ?? bucket?.amount ?? 0),
   orders: toNumber(bucket?.totalCount ?? bucket?.count ?? 0),
-  items: countItems(bucket?.items),
+  items: toNumber(bucket?.itemCount ?? bucket?.totalItems ?? countItems(bucket?.items)),
 });
 
 const Home = () => {
@@ -100,7 +100,11 @@ const Home = () => {
             ? statsData.monthdata.reduce((sum, month) => sum + toNumber(month?.count), 0)
             : 0,
           items: Array.isArray(statsData?.monthdata)
-            ? statsData.monthdata.reduce((sum, month) => sum + countItems(month?.items), 0)
+            ? statsData.monthdata.reduce(
+                (sum, month) =>
+                  sum + toNumber(month?.itemCount ?? month?.totalItems ?? countItems(month?.items)),
+                0
+              )
             : 0,
         },
         year: metricFromBucket(statsData?.yeardata?.[0]),

@@ -72,11 +72,12 @@ const getYearRangeIST = () => {
   return { start, end };
 };
 
-const NON_CANCELLED_MATCH = {
-  $or: [
-    { orderStatus: { $exists: false } },
-    { orderStatus: null },
-    { orderStatus: { $not: /^cancelled$/i } },
+const ACTIVE_ORDER_MATCH = {
+  $nor: [
+    { orderStatus: { $regex: /^\s*cancelled\s*$/i } },
+    { orderStatus: { $regex: /^\s*returned\s*$/i } },
+    { orderType: { $regex: /^\s*cancelled\s*$/i } },
+    { orderType: { $regex: /^\s*returned\s*$/i } },
   ],
 };
 
@@ -88,7 +89,7 @@ const aggregateMetrics = async (range, { amountKey = "totalIncome", countKey = "
           $gte: range.start,
           $lte: range.end,
         },
-        ...NON_CANCELLED_MATCH,
+        ...ACTIVE_ORDER_MATCH,
       },
     },
     {
@@ -96,6 +97,24 @@ const aggregateMetrics = async (range, { amountKey = "totalIncome", countKey = "
         _id: null,
         totalIncome: { $sum: "$finalAmount" },
         totalCount: { $sum: 1 },
+        totalItems: {
+          $sum: {
+            $sum: {
+              $map: {
+                input: { $ifNull: ["$orderItems", []] },
+                as: "item",
+                in: {
+                  $convert: {
+                    input: "$$item.quantity",
+                    to: "double",
+                    onError: 0,
+                    onNull: 0,
+                  },
+                },
+              },
+            },
+          },
+        },
         items: { $push: "$orderItems" },
       },
     },
@@ -104,6 +123,7 @@ const aggregateMetrics = async (range, { amountKey = "totalIncome", countKey = "
         _id: 1,
         totalIncome: 1,
         totalCount: 1,
+        totalItems: 1,
         items: 1,
       },
     },
@@ -117,6 +137,7 @@ const aggregateMetrics = async (range, { amountKey = "totalIncome", countKey = "
     {
       [amountKey]: data.totalIncome,
       [countKey]: data.totalCount,
+      itemCount: data.totalItems,
       items: data.items,
     },
   ];

@@ -196,6 +196,26 @@ export async function GET(request) {
               '$_finalAmountNumeric',
             ],
           },
+          _orderNumberSequence: {
+            $let: {
+              vars: {
+                orderNumberMatch: {
+                  $regexFind: {
+                    input: { $ifNull: ['$orderNumber', ''] },
+                    regex: '\\d+',
+                  },
+                },
+              },
+              in: {
+                $convert: {
+                  input: { $ifNull: ['$$orderNumberMatch.match', '0'] },
+                  to: 'double',
+                  onError: 0,
+                  onNull: 0,
+                },
+              },
+            },
+          },
         },
       },
       {
@@ -204,7 +224,7 @@ export async function GET(request) {
           orders: [
             { $match: filterQuery }, // apply the selected filter
             { $addFields: { finalAmount: '$_effectiveFinalAmount' } },
-            { $sort: { createdAt: -1 } },
+            { $sort: { _orderNumberSequence: -1, createdAt: -1 } },
             { $skip: skip },
             { $limit: limit },
             {
@@ -259,6 +279,7 @@ export async function GET(request) {
                 _isCodResolved: 0,
                 _isPrepaidResolved: 0,
                 _effectiveFinalAmount: 0,
+                _orderNumberSequence: 0,
               },
             },
           ],

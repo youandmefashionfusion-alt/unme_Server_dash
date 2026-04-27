@@ -17,11 +17,12 @@ const parseDateInput = (value = "") => {
 const getISTStartOfDayUTC = ({ year, month, day }) =>
   new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0) - IST_OFFSET_MS);
 
-const NON_CANCELLED_MATCH = {
-  $or: [
-    { orderStatus: { $exists: false } },
-    { orderStatus: null },
-    { orderStatus: { $not: /^cancelled$/i } },
+const ACTIVE_ORDER_MATCH = {
+  $nor: [
+    { orderStatus: { $regex: /^\s*cancelled\s*$/i } },
+    { orderStatus: { $regex: /^\s*returned\s*$/i } },
+    { orderType: { $regex: /^\s*cancelled\s*$/i } },
+    { orderType: { $regex: /^\s*returned\s*$/i } },
   ],
 };
 
@@ -59,7 +60,7 @@ export async function GET(request) {
           $gte: start,
           $lte: end,
         },
-        ...NON_CANCELLED_MATCH,
+        ...ACTIVE_ORDER_MATCH,
       },
     },
     {
@@ -67,6 +68,24 @@ export async function GET(request) {
         _id: null,
         totalIncome: { $sum: "$finalAmount" },
         totalCount: { $sum: 1 },
+        totalItems: {
+          $sum: {
+            $sum: {
+              $map: {
+                input: { $ifNull: ["$orderItems", []] },
+                as: "item",
+                in: {
+                  $convert: {
+                    input: "$$item.quantity",
+                    to: "double",
+                    onError: 0,
+                    onNull: 0,
+                  },
+                },
+              },
+            },
+          },
+        },
         items: { $push: "$orderItems" },
       },
     },
@@ -75,6 +94,7 @@ export async function GET(request) {
         _id: 0,
         totalIncome: 1,
         totalCount: 1,
+        itemCount: "$totalItems",
         items: 1,
       },
     },
