@@ -8,7 +8,8 @@
     "start": "next start",
     "seed:admin": "node scripts/seed-admin-user.js",
     "backup:cloudinary:s3": "node scripts/backup-cloudinary-to-s3.js",
-    "migrate:cloudinary-urls:s3": "node scripts/migrate-cloudinary-urls-to-s3.js"
+    "migrate:cloudinary-urls:s3": "node scripts/migrate-cloudinary-urls-to-s3.js",
+    "migrate:seo-slugs": "node scripts/migrate-seo-slugs.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1014.0",

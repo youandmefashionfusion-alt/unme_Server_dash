@@ -7,6 +7,26 @@ export const config = {
   maxDuration: 20,
 };
 
+const escapeRegex = (value = "") =>
+  String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const toSlugTokens = (value = "") =>
+  String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+
+const appendAndCondition = (query, condition) => {
+  if (Array.isArray(query.$and)) {
+    query.$and.push(condition);
+    return;
+  }
+  query.$and = [condition];
+};
+
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
 
@@ -80,6 +100,29 @@ export async function GET(request) {
 
       if (searchConditions.length > 0) {
         query.$and = searchConditions;
+      }
+    }
+
+    // SEO-friendly type filtering:
+    // supports:
+    // - legacy `type=Layered Necklace`
+    // - slug query `type=layered-necklace`
+    // - slug query `typeHandle=layered-necklace`
+    const typeParam = (
+      searchParams.get("typeHandle") ||
+      searchParams.get("type") ||
+      ""
+    ).trim();
+    if (typeParam) {
+      const typeTokens = toSlugTokens(typeParam);
+      if (typeTokens.length > 0) {
+        const pattern = typeTokens.map((token) => escapeRegex(token)).join("[\\s-]*");
+        const typeRegex = new RegExp(`^\\s*${pattern}\\s*$`, "i");
+        appendAndCondition(query, {
+          type: {
+            $elemMatch: { $regex: typeRegex },
+          },
+        });
       }
     }
 

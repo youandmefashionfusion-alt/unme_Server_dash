@@ -54,6 +54,17 @@ const nextConfig = {
   images: {
     remotePatterns,
   },
+  async rewrites() {
+    return {
+      beforeFiles: [
+        // Serve clean URL through existing query-based collection type flow.
+        {
+          source: "/collections/:collectionHandle/:typeHandle",
+          destination: "/collections/:collectionHandle?type=:typeHandle",
+        },
+      ],
+    };
+  },
 };
 
 export default nextConfig;
