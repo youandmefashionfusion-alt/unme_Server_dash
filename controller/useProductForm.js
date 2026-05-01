@@ -64,6 +64,7 @@ export const useProductForm = (productId, isNew = false) => {
     is999Sale: false,
     is899Sale: false,
     is1499Sale: false,
+    isBogoSale: false,
     saleCollections: [], // will always store IDs
   });
 
@@ -184,6 +185,7 @@ export const useProductForm = (productId, isNew = false) => {
           is999Sale: product.is999Sale || false,
           is899Sale: product.is899Sale || false,
           is1499Sale: product.is1499Sale || false,
+          isBogoSale: product.isBogoSale || false,
           saleCollections: saleCollectionIds,
         });
 

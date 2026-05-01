@@ -13,6 +13,7 @@ const AdminLogin = () => {
   const [formData, setFormData] = useState({
     number: '',
     password: '',
+    rememberMe: true,
   });
 
   const [showPassword, setShowPassword] = useState(false);
@@ -56,7 +57,8 @@ const AdminLogin = () => {
     try {
       await dispatch(loginUser({
         mobile: formData.number,
-        password: formData.password
+        password: formData.password,
+        rememberMe: Boolean(formData.rememberMe),
       })).unwrap();
       // router.push('/admin');
     } catch (err) {
@@ -148,7 +150,17 @@ const AdminLogin = () => {
 
           <div className={styles.checkboxRow}>
             <label className={styles.checkboxLabel}>
-              <input type="checkbox" className={styles.checkbox} />
+              <input
+                type="checkbox"
+                className={styles.checkbox}
+                checked={formData.rememberMe}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    rememberMe: e.target.checked,
+                  }))
+                }
+              />
               <span>Keep me signed in</span>
             </label>
           </div>

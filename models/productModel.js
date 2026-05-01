@@ -151,6 +151,10 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isBogoSale: {
+      type: Boolean,
+      default: false,
+    },
     saleCollections:[
       {
         type:mongoose.Schema.Types.ObjectId,

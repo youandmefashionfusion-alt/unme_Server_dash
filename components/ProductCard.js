@@ -110,6 +110,12 @@ const ProductCard = ({
           >
             ₹1499 Sale
           </button>
+          <button
+            className={`${styles.saleBtn} ${styles.saleBtnWide} ${product.isBogoSale ? styles.saleActive : ''}`}
+            onClick={() => onToggleSale(product._id, 'bogoSale', product.isBogoSale)}
+          >
+            Buy 1 Get 1 Free
+          </button>
         </div>
       </div>
     </div>

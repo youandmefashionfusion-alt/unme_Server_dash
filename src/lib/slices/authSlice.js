@@ -1,15 +1,92 @@
 // store/slices/authSlice.js
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 
+const TOKEN_KEY = 'adminAuthToken';
+const USER_KEY = 'userData';
+const REMEMBER_KEY = 'adminRememberMe';
+
+const hasWindow = () => typeof window !== 'undefined';
+
+const clearAuthStorage = () => {
+  if (!hasWindow()) return;
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(REMEMBER_KEY);
+  sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(USER_KEY);
+};
+
+const readStoredAuth = () => {
+  if (!hasWindow()) {
+    return { token: null, rememberMe: false, user: null };
+  }
+
+  const localToken = localStorage.getItem(TOKEN_KEY);
+  const sessionToken = sessionStorage.getItem(TOKEN_KEY);
+  const rememberMe = localStorage.getItem(REMEMBER_KEY) === '1';
+
+  let token = null;
+  let userRaw = null;
+  let fromRememberedStorage = false;
+
+  if (localToken) {
+    token = localToken;
+    userRaw = localStorage.getItem(USER_KEY);
+    fromRememberedStorage = true;
+  } else if (sessionToken) {
+    token = sessionToken;
+    userRaw = sessionStorage.getItem(USER_KEY);
+    fromRememberedStorage = false;
+  }
+
+  let user = null;
+  if (userRaw) {
+    try {
+      user = JSON.parse(userRaw);
+    } catch {
+      user = null;
+    }
+  }
+
+  return {
+    token,
+    user,
+    rememberMe: fromRememberedStorage ? true : false,
+  };
+};
+
+const persistAuth = (user, rememberMe) => {
+  if (!hasWindow()) return;
+
+  const token = user?.token;
+  if (!token) {
+    clearAuthStorage();
+    return;
+  }
+
+  const serializedUser = JSON.stringify(user);
+
+  if (rememberMe) {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(USER_KEY, serializedUser);
+    localStorage.setItem(REMEMBER_KEY, '1');
+    sessionStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(USER_KEY);
+    return;
+  }
+
+  sessionStorage.setItem(TOKEN_KEY, token);
+  sessionStorage.setItem(USER_KEY, serializedUser);
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(REMEMBER_KEY);
+};
+
 // Async thunks
 export const checkAuthStatus = createAsyncThunk(
   'auth/checkStatus',
   async () => {
-    // Get token from localStorage if available
-    let adminAuthToken = null;
-    if (typeof window !== 'undefined') {
-      adminAuthToken = localStorage.getItem('adminAuthToken');
-    }
+    const { token: adminAuthToken, rememberMe, user: cachedUser } = readStoredAuth();
 
     const headers = {};
     if (adminAuthToken) {
@@ -25,14 +102,12 @@ export const checkAuthStatus = createAsyncThunk(
 
     if (!response.ok) {
       if (
-        typeof window !== 'undefined' &&
-        [401, 403, 404].includes(response.status)
+        [401, 403].includes(response.status)
       ) {
-        localStorage.removeItem('adminAuthToken');
-        localStorage.removeItem('userData');
+        clearAuthStorage();
       }
 
-      if ([401, 403, 404].includes(response.status)) {
+      if ([401, 403].includes(response.status)) {
         return {
           user: null,
           isAuthenticated: false,
@@ -40,12 +115,24 @@ export const checkAuthStatus = createAsyncThunk(
         };
       }
 
+      // Graceful fallback for transient route/server errors.
+      if (
+        [404, 429, 500, 502, 503, 504].includes(response.status) &&
+        adminAuthToken &&
+        cachedUser
+      ) {
+        return {
+          user: cachedUser,
+          isAuthenticated: true,
+          stale: true,
+        };
+      }
+
       throw new Error(session?.error || 'Session check failed');
     }
 
-    if (typeof window !== 'undefined' && session?.user?.token) {
-      localStorage.setItem('adminAuthToken', session.user.token);
-      localStorage.setItem('userData', JSON.stringify(session.user));
+    if (session?.user?.token) {
+      persistAuth(session.user, rememberMe);
     }
 
     return session;
@@ -55,7 +142,7 @@ export const checkAuthStatus = createAsyncThunk(
 // In your loginUser thunk
 export const loginUser = createAsyncThunk(
   'auth/login',
-  async ({ mobile, password }, { rejectWithValue }) => {
+  async ({ mobile, password, rememberMe = false }, { rejectWithValue }) => {
     try {
       const normalizedMobile = String(mobile || '').replace(/\D/g, '').slice(-10);
       const response = await fetch('/api/user/admin-login', {
@@ -63,7 +150,7 @@ export const loginUser = createAsyncThunk(
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ mobile: normalizedMobile, password }),
+        body: JSON.stringify({ mobile: normalizedMobile, password, rememberMe }),
       });
 
       const data = await response.json();
@@ -72,10 +159,8 @@ export const loginUser = createAsyncThunk(
         return rejectWithValue(data.message || 'Login failed');
       }
 
-      // Store token in localStorage
-      if (typeof window !== 'undefined' && data.user.token) {
-        localStorage.setItem('adminAuthToken', data.user.token);
-        localStorage.setItem('userData', JSON.stringify(data.user));
+      if (data?.user?.token) {
+        persistAuth(data.user, Boolean(rememberMe));
       }
 
       return data;
@@ -115,11 +200,7 @@ export const logoutUser = createAsyncThunk(
   'auth/logout',
   async (_, { rejectWithValue }) => {
     try {
-      // Get token from localStorage for Authorization header
-      let adminAuthToken = null;
-      if (typeof window !== 'undefined') {
-        adminAuthToken = localStorage.getItem('adminAuthToken');
-      }
+      const { token: adminAuthToken } = readStoredAuth();
 
       const headers = {
         'Content-Type': 'application/json',
@@ -135,21 +216,13 @@ export const logoutUser = createAsyncThunk(
         headers
       });
       
-      // Clear local storage regardless of API call success
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('adminAuthToken');
-        localStorage.removeItem('userData');
-        localStorage.removeItem('localCart');
-      }
+      clearAuthStorage();
+      if (hasWindow()) localStorage.removeItem('localCart');
 
       return true;
     } catch (error) {
-      // Even if API call fails, clear local storage
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('adminAuthToken');
-        localStorage.removeItem('userData');
-        localStorage.removeItem('localCart');
-      }
+      clearAuthStorage();
+      if (hasWindow()) localStorage.removeItem('localCart');
       return rejectWithValue(error.message);
     }
   }
@@ -182,6 +255,7 @@ const authSlice = createSlice({
         state.loading = false
         state.user = action.payload.user
         state.isAuthenticated = action.payload.isAuthenticated
+        state.error = action.payload?.error || null
       })
       .addCase(checkAuthStatus.rejected, (state) => {
         state.loading = false

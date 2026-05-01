@@ -307,6 +307,17 @@ const ProductDetailPage = () => {
                 </label>
               </div>
               <div className={styles.toggleItem}>
+                <span>Buy 1 Get 1</span>
+                <label className={styles.switch}>
+                  <input
+                    type="checkbox"
+                    checked={formData.isBogoSale}
+                    onChange={(e) => handleInputChange('isBogoSale', e.target.checked)}
+                  />
+                  <span className={styles.slider}></span>
+                </label>
+              </div>
+              <div className={styles.toggleItem}>
                 <span>Featured</span>
                 <label className={styles.switch}>
                   <input

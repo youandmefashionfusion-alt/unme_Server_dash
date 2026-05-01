@@ -31,6 +31,8 @@ export async function PUT(req) {
       "999Sale": "is999Sale",
       "899Sale": "is899Sale",
       "1499Sale": "is1499Sale",
+      "bogoSale": "isBogoSale",
+      "b1g1Sale": "isBogoSale",
     };
 
     const updateField = saleFieldMap[saleName];

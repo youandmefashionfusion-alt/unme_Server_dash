@@ -360,6 +360,10 @@
   transition: all 0.2s;
 }
 
+.saleBtnWide {
+  grid-column: 1 / -1;
+}
+
 .saleBtn:hover {
   background: #FEF2F2;
 }

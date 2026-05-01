@@ -243,6 +243,7 @@ const BulkUploadPage = () => {
               is999Sale: false,
               is899Sale: false,
               is1499Sale: false,
+              isBogoSale: false,
               metaTitle: getFirstValue(row, ['meta title', 'title', 'product title']) || '',
               metaDesc: getFirstValue(row, ['meta description', 'description']) || '',
             };

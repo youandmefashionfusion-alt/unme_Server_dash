@@ -4,21 +4,41 @@ import { generateadminRefreshToken } from "../../../../../config/refreshtoken";
 import { generateToken } from "../../../../../config/jwtToken";
 import { NextResponse } from "next/server";
 
-const DEFAULT_REFRESH_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60; // 365 days
-const ADMIN_REFRESH_COOKIE_MAX_AGE_SECONDS = Number.parseInt(
-  process.env.ADMIN_REFRESH_COOKIE_MAX_AGE_SECONDS || `${DEFAULT_REFRESH_COOKIE_MAX_AGE_SECONDS}`,
+const DEFAULT_REMEMBER_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60; // 365 days
+const ADMIN_REMEMBER_COOKIE_MAX_AGE_SECONDS = Number.parseInt(
+  process.env.ADMIN_REMEMBER_COOKIE_MAX_AGE_SECONDS ||
+    `${DEFAULT_REMEMBER_COOKIE_MAX_AGE_SECONDS}`,
   10
 );
+const ADMIN_PERSISTENT_REFRESH_EXPIRES_IN =
+  process.env.ADMIN_PERSISTENT_REFRESH_EXPIRES_IN || "365d";
+const ADMIN_SESSION_REFRESH_EXPIRES_IN =
+  process.env.ADMIN_SESSION_REFRESH_EXPIRES_IN || "7d";
+const ADMIN_PERSISTENT_ACCESS_EXPIRES_IN =
+  process.env.ADMIN_PERSISTENT_ACCESS_EXPIRES_IN ||
+  process.env.JWT_ACCESS_EXPIRES_IN ||
+  "365d";
+const ADMIN_SESSION_ACCESS_EXPIRES_IN =
+  process.env.ADMIN_SESSION_ACCESS_EXPIRES_IN || "7d";
 const MOBILE_REGEX = /^[6-9]\d{9}$/;
 
 const normalizeMobile = (value) =>
   String(value || "").replace(/\D/g, "").slice(-10);
+const parseRememberMe = (value) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "true" || normalized === "1" || normalized === "yes";
+  }
+  return false;
+};
 
 export async function POST(req) {
   try {
     const body = await req.json().catch(() => ({}));
     const normalizedMobile = normalizeMobile(body?.mobile);
     const password = String(body?.password || "");
+    const rememberMe = parseRememberMe(body?.rememberMe);
 
     if (!normalizedMobile || !password) {
       return NextResponse.json(
@@ -101,7 +121,17 @@ export async function POST(req) {
       );
     }
 
-    const adminRefreshToken = await generateadminRefreshToken(findUser._id);
+    const refreshTokenExpiresIn = rememberMe
+      ? ADMIN_PERSISTENT_REFRESH_EXPIRES_IN
+      : ADMIN_SESSION_REFRESH_EXPIRES_IN;
+    const accessTokenExpiresIn = rememberMe
+      ? ADMIN_PERSISTENT_ACCESS_EXPIRES_IN
+      : ADMIN_SESSION_ACCESS_EXPIRES_IN;
+
+    const adminRefreshToken = await generateadminRefreshToken(
+      findUser._id,
+      refreshTokenExpiresIn
+    );
 
     const updatedUser = await UserModel.findByIdAndUpdate(
       findUser._id,
@@ -130,7 +160,8 @@ export async function POST(req) {
       mobile: updatedUser.mobile,
       image: updatedUser.image,
       role: updatedUser.role,
-      token: generateToken(updatedUser._id),
+      token: generateToken(updatedUser._id, accessTokenExpiresIn),
+      rememberMe,
     };
 
     const response = NextResponse.json({
@@ -142,9 +173,10 @@ export async function POST(req) {
     response.cookies.set("adminRefreshToken", adminRefreshToken, {
       httpOnly: true, // Prevent JS access
       secure: process.env.NODE_ENV === "production",
-      maxAge: Number.isFinite(ADMIN_REFRESH_COOKIE_MAX_AGE_SECONDS)
-        ? ADMIN_REFRESH_COOKIE_MAX_AGE_SECONDS
-        : DEFAULT_REFRESH_COOKIE_MAX_AGE_SECONDS,
+      ...(rememberMe &&
+        Number.isFinite(ADMIN_REMEMBER_COOKIE_MAX_AGE_SECONDS) && {
+          maxAge: ADMIN_REMEMBER_COOKIE_MAX_AGE_SECONDS,
+        }),
       path: "/",
       sameSite: "lax",
     });

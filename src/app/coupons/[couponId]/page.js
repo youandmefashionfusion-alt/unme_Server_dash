@@ -80,6 +80,14 @@ const CouponForm = ({ params }) => {
       toast.error("Please enter minimum items/amount")
       return false
     }
+    if (formData.discounttype === 'buyX') {
+      const minItem = Number.parseInt(formData.minItem, 10)
+      const freeItems = Number.parseInt(formData.discount, 10)
+      if (!Number.isFinite(minItem) || minItem <= 0 || !Number.isFinite(freeItems) || freeItems <= 0) {
+        toast.error("For Buy X Get Y, use positive integer values only")
+        return false
+      }
+    }
     return true
   }
 
@@ -209,18 +217,33 @@ const CouponForm = ({ params }) => {
               </div>
 
               {formData.discounttype === 'buyX' && (
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>
-                    Minimum Quantity/Amount *
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="e.g., 2 for minimum 2 items, 1000 for minimum ₹1000"
-                    value={formData.minItem}
-                    onChange={(e) => handleInputChange('minItem', e.target.value)}
-                    className={styles.input}
-                  />
-                </div>
+                <>
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>
+                      Minimum Quantity/Amount *
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="e.g., 2 for minimum 2 items, 1000 for minimum Rs 1000"
+                      value={formData.minItem}
+                      onChange={(e) => handleInputChange('minItem', e.target.value)}
+                      className={styles.input}
+                    />
+                    <span className={styles.helperText}>
+                      For Buy 1 Get 1: set this value to 1
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.primaryButton}
+                    onClick={() => {
+                      handleInputChange('minItem', 1)
+                      handleInputChange('discount', '1')
+                    }}
+                  >
+                    Set Buy 1 Get 1
+                  </button>
+                </>
               )}
 
               {formData.discounttype !== 'freeShip' && (
@@ -337,5 +360,6 @@ const CouponForm = ({ params }) => {
 }
 
 export default CouponForm
+
 
 
