@@ -18,6 +18,7 @@ export const useProducts = () => {
   const page = parseInt(searchParams.get('page')) || 1;
   const stateFilter = searchParams.get('state') || 'all';
   const collectionFilter = searchParams.get('collection') || '';
+  const skuFilter = searchParams.get('sku') || '';
 
   // Fetch collections
   const fetchCollections = useCallback(async () => {
@@ -39,6 +40,7 @@ export const useProducts = () => {
         limit: PRODUCTS_PER_PAGE,
         state: stateFilter,
         ...(collectionFilter && { collectionHandle: collectionFilter }),
+        ...(skuFilter && { sku: skuFilter }),
       });
 
       const res = await fetch(`/api/products?${query.toString()}`, {
@@ -62,15 +64,17 @@ export const useProducts = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, stateFilter, collectionFilter]);
+  }, [page, stateFilter, collectionFilter, skuFilter]);
 
   // Update URL when filters change
   const updateFilters = useCallback((newFilters) => {
     const params = new URLSearchParams(searchParams);
     
     Object.entries(newFilters).forEach(([key, value]) => {
-      if (value) {
-        params.set(key, value);
+      const normalizedValue = typeof value === 'string' ? value.trim() : value;
+
+      if (normalizedValue !== undefined && normalizedValue !== null && normalizedValue !== '') {
+        params.set(key, String(normalizedValue));
       } else {
         params.delete(key);
       }
@@ -180,7 +184,7 @@ export const useProducts = () => {
     collections,
     loading,
     pagination,
-    filters: { page, state: stateFilter, collection: collectionFilter },
+    filters: { page, state: stateFilter, collection: collectionFilter, sku: skuFilter },
     updateFilters,
     deleteProduct,
     duplicateProduct,

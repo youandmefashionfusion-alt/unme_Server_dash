@@ -99,8 +99,18 @@ export async function GET(request) {
       });
 
       if (searchConditions.length > 0) {
-        query.$and = searchConditions;
+        searchConditions.forEach((condition) => {
+          appendAndCondition(query, condition);
+        });
       }
+    }
+
+    // SKU search for dashboard filters (supports partial and exact match).
+    const skuParam = (searchParams.get("sku") || "").trim();
+    if (skuParam) {
+      appendAndCondition(query, {
+        sku: { $regex: escapeRegex(skuParam), $options: "i" },
+      });
     }
 
     // SEO-friendly type filtering:

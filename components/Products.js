@@ -1,16 +1,14 @@
 ﻿'use client';
 
-import React, { useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Filter, X, Download, ShoppingBag } from 'lucide-react';
+import { Plus, Filter, X, Download, ShoppingBag, Search } from 'lucide-react';
 import { useProducts } from '../controller/useProducts';
 import ProductCard from './ProductCard';
 import styles from '../src/app/products/Products.module.css';
 import toast from 'react-hot-toast';
 
 const ProductsPage = () => {
-  const router = useRouter();
   const {
     products,
     collections,
@@ -22,6 +20,11 @@ const ProductsPage = () => {
     duplicateProduct,
     toggleSale,
   } = useProducts();
+  const [skuSearch, setSkuSearch] = useState(filters.sku || '');
+
+  useEffect(() => {
+    setSkuSearch(filters.sku || '');
+  }, [filters.sku]);
 
   const modifyImageUrl = useCallback((url) => {
     if (!url) return '/placeholder.jpg';
@@ -48,10 +51,36 @@ const ProductsPage = () => {
   }, []);
 
   const clearFilters = useCallback(() => {
-    updateFilters({ state: 'all', collection: '', page: 1 });
+    setSkuSearch('');
+    updateFilters({ state: 'all', collection: '', sku: '', page: 1 });
   }, [updateFilters]);
 
-  const hasActiveFilters = (filters.state && filters.state !== 'all') || filters.collection;
+  const handleSkuSearchChange = useCallback((event) => {
+    const nextValue = event.target.value;
+    setSkuSearch(nextValue);
+
+    // If SKU input is fully cleared, remove stale sku query immediately.
+    if (!nextValue.trim() && filters.sku) {
+      updateFilters({ sku: '', page: 1 });
+    }
+  }, [filters.sku, updateFilters]);
+
+  const applySkuSearch = useCallback((event) => {
+    event.preventDefault();
+    const normalizedSku = skuSearch.trim();
+
+    if (!normalizedSku) {
+      if (filters.sku) updateFilters({ sku: '', page: 1 });
+      return;
+    }
+
+    updateFilters({ sku: normalizedSku, page: 1 });
+  }, [filters.sku, skuSearch, updateFilters]);
+
+  const hasActiveFilters =
+    (filters.state && filters.state !== 'all') ||
+    filters.collection ||
+    filters.sku;
   const handleExport = async () => {
     try {
       const response = await fetch(`/api/products/export`, {
@@ -114,6 +143,22 @@ const ProductsPage = () => {
       <div className={styles.filtersBar}>
         <div className={styles.filtersGroup}>
           <Filter size={16} className={styles.filterIcon} />
+
+          <form onSubmit={applySkuSearch} className={styles.searchForm}>
+            <div className={styles.searchInputWrap}>
+              <Search size={15} className={styles.searchInputIcon} />
+              <input
+                type="text"
+                value={skuSearch}
+                onChange={handleSkuSearchChange}
+                placeholder="Search by SKU code"
+                className={styles.searchInput}
+              />
+            </div>
+            <button type="submit" className={styles.searchBtn}>
+              Search
+            </button>
+          </form>
 
           <select
             value={filters.state}
