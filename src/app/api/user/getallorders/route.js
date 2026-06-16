@@ -106,13 +106,17 @@ export async function GET(request) {
       // Phone is stored as a Number, so convert it to a string to allow
       // partial matches (strip non-digits from the query for phone matching).
       const phoneDigits = kw.replace(/\D/g, '');
+      // Only treat the query as a phone search when it looks like a phone
+      // number (digits/phone separators only). Otherwise an email or name
+      // containing a stray digit would wrongly match unrelated phone numbers.
+      const isPhoneLike = phoneDigits.length >= 4 && !/[a-zA-Z@]/.test(kw);
       baseMatch.$or = [
         { orderNumber: { $regex: escaped, $options: 'i' } },
         { 'shippingInfo.firstname': { $regex: escaped, $options: 'i' } },
         { 'shippingInfo.lastname': { $regex: escaped, $options: 'i' } },
         { 'shippingInfo.email': { $regex: escaped, $options: 'i' } },
       ];
-      if (phoneDigits) {
+      if (isPhoneLike) {
         baseMatch.$or.push({
           $expr: {
             $regexMatch: {
