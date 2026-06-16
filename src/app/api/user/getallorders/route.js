@@ -98,16 +98,30 @@ export async function GET(request) {
     // Base match conditions (search + date range)
     let baseMatch = {};
 
-    // Search
+    // Search by order number, customer name, email or phone number.
     if (search) {
-      const kw = search.toLowerCase().trim();
+      const kw = search.trim();
+      // Escape regex special characters so user input is matched literally.
+      const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Phone is stored as a Number, so convert it to a string to allow
+      // partial matches (strip non-digits from the query for phone matching).
+      const phoneDigits = kw.replace(/\D/g, '');
       baseMatch.$or = [
-        { orderNumber: { $regex: kw, $options: 'i' } },
-        { 'shippingInfo.firstname': { $regex: kw, $options: 'i' } },
-        { 'shippingInfo.lastname': { $regex: kw, $options: 'i' } },
-        { 'shippingInfo.email': { $regex: kw, $options: 'i' } },
-        { 'shippingInfo.phone': parseInt(kw) || null },
+        { orderNumber: { $regex: escaped, $options: 'i' } },
+        { 'shippingInfo.firstname': { $regex: escaped, $options: 'i' } },
+        { 'shippingInfo.lastname': { $regex: escaped, $options: 'i' } },
+        { 'shippingInfo.email': { $regex: escaped, $options: 'i' } },
       ];
+      if (phoneDigits) {
+        baseMatch.$or.push({
+          $expr: {
+            $regexMatch: {
+              input: { $toString: { $ifNull: ['$shippingInfo.phone', ''] } },
+              regex: phoneDigits,
+            },
+          },
+        });
+      }
     }
 
     // Date range

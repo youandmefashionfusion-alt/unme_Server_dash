@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Search, Calendar, MapPin, Phone, Package, X, Check, Download, Trash2, Gift, MessageSquare, Save, Upload } from 'lucide-react';
+import { Plus, Search, Calendar, Clock, MapPin, Phone, Package, X, Check, Download, Trash2, Gift, MessageSquare, Save, Upload } from 'lucide-react';
 import { useOrders } from '../controller/useOrders';
 import styles from '../src/app/orders/orders.module.css';
 import filterStyles from '../src/app/orders/orderFilters.module.css';
@@ -267,6 +267,11 @@ export default function OrdersPage() {
   const formatDate = (date) =>
     new Date(date).toLocaleDateString('en-IN', {
       day: 'numeric', month: 'short', year: 'numeric',
+    });
+
+  const formatTime = (date) =>
+    new Date(date).toLocaleTimeString('en-IN', {
+      hour: 'numeric', minute: '2-digit', hour12: true,
     });
 
   const modifyImageUrl = (url) => {
@@ -558,9 +563,15 @@ export default function OrdersPage() {
                       {order?.orderStatus}
                     </span>
                   </div>
-                  <div className={styles.date}>
-                    <Calendar size={14} />
-                    {formatDate(order.createdAt)}
+                  <div className={styles.date} style={{ flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <Calendar size={14} />
+                      {formatDate(order.createdAt)}
+                    </span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#9CA3AF' }}>
+                      <Clock size={13} />
+                      {formatTime(order.createdAt)}
+                    </span>
                   </div>
                 </div>
 
