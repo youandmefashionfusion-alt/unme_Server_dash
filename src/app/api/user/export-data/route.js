@@ -1,6 +1,8 @@
 import * as XLSX from 'xlsx';
 import connectDb from '../../../../../config/connectDb';
 import OrderModel from '../../../../../models/orderModel';
+// Import the Product model so its schema is registered for populate('orderItems.product').
+import '../../../../../models/productModel';
 import { NextResponse } from 'next/server';
 
 export async function POST(req) {
@@ -49,7 +51,10 @@ export async function POST(req) {
         return NextResponse.json({ error: 'Either order number range or date range must be provided' }, { status: 400 });
       }
 
-      orders = await OrderModel.find(filter);
+      orders = await OrderModel.find(filter).populate({
+        path: 'orderItems.product',
+        select: 'title sku price',
+      });
     } else {
       return NextResponse.json({ error: 'Invalid data type. Use "youandme" or "shopify"' }, { status: 400 });
     }
@@ -90,23 +95,81 @@ export async function POST(req) {
       return Array.isArray(arr) && arr.length > index ? arr[index] : '';
     };
 
+    // Build readable product detail columns from populated orderItems.
+    const buildItemDetails = (order) => {
+      const items = Array.isArray(order.orderItems) ? order.orderItems : [];
+      const titles = [];
+      const skus = [];
+      const quantities = [];
+      const prices = [];
+      const lines = [];
+      let totalQty = 0;
+
+      items.forEach((item) => {
+        const product = item?.product || {};
+        const title = product.title || 'Product removed';
+        const sku = product.sku || '';
+        const qty = Number(item?.quantity) || 0;
+        const price = Number(product.price) || 0;
+        totalQty += qty;
+
+        titles.push(title);
+        skus.push(sku);
+        quantities.push(qty);
+        prices.push(price);
+        lines.push(`${title}${sku ? ` (${sku})` : ''} x${qty} @${price}`);
+      });
+
+      return {
+        Products: lines.join(' | '),
+        ProductTitles: titles.join(' | '),
+        ProductSKUs: skus.join(' | '),
+        ProductQuantities: quantities.join(' | '),
+        ProductPrices: prices.join(' | '),
+        ItemsCount: items.length,
+        TotalQuantity: totalQty,
+      };
+    };
+
     // ── Prepare Excel data ─────────────────────────────────────────────
     let data = [];
 
     if (dataType === 'youandme') {
-      data = orders.map(order => ({
-        OrderNumber: order.orderNumber || '',
-        Email: order.shippingInfo?.email || '',
-        Mobile: order.shippingInfo?.phone || '',
-        FirstName: order.shippingInfo?.firstname || '',
-        OrderType: order.orderType || '',
-        Address: order.shippingInfo?.address || '',
-        City: order.shippingInfo?.city || '',
-        State: order.shippingInfo?.state || '',
-        Pincode: order.shippingInfo?.pincode || '',
-        Amount: order.finalAmount || 0,
-        CreatedAt: formatDate(order.createdAt),
-      }));
+      data = orders.map(order => {
+        const itemDetails = buildItemDetails(order);
+        return {
+          OrderNumber: order.orderNumber || '',
+          Email: order.shippingInfo?.email || '',
+          Mobile: order.shippingInfo?.phone || '',
+          FirstName: order.shippingInfo?.firstname || '',
+          LastName: order.shippingInfo?.lastname || '',
+          OrderType: order.orderType || '',
+          OrderStatus: order.orderStatus || '',
+          OrderCalled: order.orderCalled || '',
+          Address: order.shippingInfo?.address || '',
+          City: order.shippingInfo?.city || '',
+          State: order.shippingInfo?.state || '',
+          Pincode: order.shippingInfo?.pincode || '',
+          // Product details
+          Products: itemDetails.Products,
+          ProductTitles: itemDetails.ProductTitles,
+          ProductSKUs: itemDetails.ProductSKUs,
+          ProductQuantities: itemDetails.ProductQuantities,
+          ProductPrices: itemDetails.ProductPrices,
+          ItemsCount: itemDetails.ItemsCount,
+          TotalQuantity: itemDetails.TotalQuantity,
+          // Order amount details
+          TotalPrice: order.totalPrice || 0,
+          ShippingCost: order.shippingCost || 0,
+          CodCharge: order.codCharge || 0,
+          GiftWrapTotal: order.giftWrapTotal || 0,
+          Discount: order.discount || 0,
+          Amount: order.finalAmount || 0,
+          PaymentId: order.paymentInfo?.razorpayPaymentId || order.paymentInfo?.paymentId || '',
+          RazorpayOrderId: order.paymentInfo?.razorpayOrderId || '',
+          CreatedAt: formatDate(order.createdAt),
+        };
+      });
     } else if (dataType === 'shopify') {
       data = orders.map(order => ({
         OrderNumber: order.orderNumber || order.id || '',
