@@ -1,6 +1,7 @@
 import connectDb from "../../../../../config/connectDb";
 import authMiddleware from "../../../../../controller/authController";
 import OrderModel from "../../../../../models/orderModel";
+import ProductModel from "../../../../../models/productModel";
 import { CHECKOUT_STANDARD_GIFT_WRAP_CHARGE } from "../../../../lib/orderPricing";
 
 const toFiniteNumber = (value, fallback = 0) => {
@@ -13,7 +14,12 @@ const sanitizeGiftMessage = (message) => String(message || "").trim().slice(0, 1
 const getProductId = (product) => {
   if (!product) return "";
   if (typeof product === "string") return product;
-  if (typeof product === "object" && product?._id) return String(product._id);
+  if (typeof product === "object") {
+    // Populated product document.
+    if (product._id) return String(product._id);
+    // Raw ObjectId (e.g. from a .lean() order) stringifies to its hex id.
+    return String(product);
+  }
   return "";
 };
 
@@ -50,6 +56,45 @@ const getGiftWrapTotalFromItems = (items) => {
   if (!Array.isArray(items)) return 0;
   const hasGiftWrap = items.some((item) => Boolean(item?.giftWrap));
   return hasGiftWrap ? CHECKOUT_STANDARD_GIFT_WRAP_CHARGE : 0;
+};
+
+// Sum ordered quantity per product id (an order may hold the same product in
+// more than one line item, so we aggregate to be safe).
+const buildQuantityMap = (items) => {
+  const map = new Map();
+  if (!Array.isArray(items)) return map;
+  for (const item of items) {
+    const productId = getProductId(item?.product);
+    if (!productId) continue;
+    const quantity = Math.max(toFiniteNumber(item?.quantity), 0);
+    map.set(productId, (map.get(productId) || 0) + quantity);
+  }
+  return map;
+};
+
+// Reconcile inventory for the difference between the old and new order items.
+// delta = newQty - oldQty. We reduce stock by the delta and raise `sold` by the
+// same amount, so a negative delta (qty reduced or item removed) restocks the
+// product. Best-effort: failures are logged, never blocking the order update.
+const reconcileInventory = async (oldItems, newItems) => {
+  try {
+    const oldMap = buildQuantityMap(oldItems);
+    const newMap = buildQuantityMap(newItems);
+    const productIds = new Set([...oldMap.keys(), ...newMap.keys()]);
+
+    await Promise.all(
+      [...productIds].map((productId) => {
+        const delta = (newMap.get(productId) || 0) - (oldMap.get(productId) || 0);
+        if (delta === 0) return null;
+        // Atomic update avoids read-modify-write races between concurrent edits.
+        return ProductModel.findByIdAndUpdate(productId, {
+          $inc: { quantity: -delta, sold: delta },
+        });
+      })
+    );
+  } catch (error) {
+    console.error("Error reconciling inventory on order update:", error.message);
+  }
 };
 
 export async function PUT(request){
@@ -89,10 +134,15 @@ export async function PUT(request){
         finalAmount,
       };
 
+      // Capture the previous items before the update so we can adjust inventory
+      // by the difference (added/removed/changed quantities).
+      const existingOrder = await OrderModel.findById(id).lean();
+
       const updatedOrder = await OrderModel.findByIdAndUpdate(id, payload, {
         new: true,
       });
       if(updatedOrder){
+        await reconcileInventory(existingOrder?.orderItems, normalizedOrderItems);
         return Response.json(updatedOrder)
       }
       else{
