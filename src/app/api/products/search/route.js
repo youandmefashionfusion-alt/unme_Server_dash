@@ -1,4 +1,6 @@
 import ProductModel from "../../../../../models/productModel";
+// Register the Collection model so populate('collectionName') can resolve its ref.
+import "../../../../../models/collectionModel";
 import connectDb from "../../../../../config/connectDb";
 
 export async function GET(request) {

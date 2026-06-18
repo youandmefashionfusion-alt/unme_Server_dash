@@ -178,22 +178,66 @@ var orderSchema = new mongoose.Schema(
 orderSchema.pre("save", async function (next) {
   try {
     if (!this.orderNumber) {
-      const latestOrder = await this.constructor.findOne({}, {}, { sort: { 'createdAt': -1 } });
-      let latestOrderNumber = 0;
+      const tagPrefix = "YM";
 
-      if (latestOrder && latestOrder.orderNumber) {
-        latestOrderNumber = parseInt(latestOrder.orderNumber.replace(/[^\d]/g, ''), 10);
+      // Derive the next number from the HIGHEST existing order number (the order
+      // shown at the top of the orders list) so dashboard and website creation
+      // stay in sync. We cannot sort orderNumber as a string ("YM9" > "YM100")
+      // or by createdAt (numbers drift from creation order), so we compute the
+      // numeric sequence and take the max.
+      const [maxDoc] = await this.constructor.aggregate([
+        { $match: { orderNumber: { $regex: /\d/ } } },
+        {
+          $addFields: {
+            _seq: {
+              $let: {
+                vars: {
+                  orderNumberMatch: {
+                    $regexFind: { input: { $ifNull: ["$orderNumber", ""] }, regex: "\\d+" },
+                  },
+                },
+                in: {
+                  $convert: {
+                    input: { $ifNull: ["$$orderNumberMatch.match", "0"] },
+                    to: "double",
+                    onError: 0,
+                    onNull: 0,
+                  },
+                },
+              },
+            },
+          },
+        },
+        { $sort: { _seq: -1 } },
+        { $limit: 1 },
+        { $project: { _seq: 1 } },
+      ]);
+
+      let nextSeq = (maxDoc?._seq || 0) + 1;
+      let candidate = `${tagPrefix}${nextSeq}`;
+
+      // Skip any number already in use (gaps, imported numbers, or an order
+      // created concurrently by the website) so we never clash.
+      // eslint-disable-next-line no-await-in-loop
+      while (await this.constructor.exists({ orderNumber: candidate })) {
+        nextSeq += 1;
+        candidate = `${tagPrefix}${nextSeq}`;
       }
 
-      const tagPrefix = "YM"
-      const newOrderNumber = `${tagPrefix}${latestOrderNumber + 1}`;
-      this.orderNumber = newOrderNumber;
+      this.orderNumber = candidate;
     }
     next();
   } catch (error) {
     next(error);
   }
 });
+// In development, drop the cached model so schema/hook edits take effect on
+// hot-reload (Mongoose caches compiled models across Next.js reloads, which
+// would otherwise keep running an outdated pre-save hook). In production the
+// model is compiled once and reused.
+if (process.env.NODE_ENV !== "production" && mongoose.models.Order) {
+  delete mongoose.models.Order;
+}
 const OrderModel = mongoose.models.Order || mongoose.model("Order", orderSchema);
 
 export default OrderModel;
