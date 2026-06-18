@@ -561,11 +561,11 @@ export default function OrderDetailPage() {
     orderShippingCost +
     orderCodCharge -
     orderDiscount;
-  const orderFinalAmount =
-    Number.isFinite(Number(order?.finalAmount)) &&
-    Number(order?.finalAmount) > 0
-      ? getSafeNumber(order?.finalAmount)
-      : derivedFinalAmount;
+  // Always derive the Total from the displayed line items (subtotal + shipping
+  // + gift wrap + COD - discount) so the breakdown always reconciles. The
+  // stored finalAmount can drift from the line items when product prices or
+  // charges change after the order was placed.
+  const orderFinalAmount = derivedFinalAmount;
   const isFreeShipping = orderShippingCost === 0;
   const freeShippingNote = isFreeShipping
     ? orderSubtotal > CHECKOUT_FREE_SHIPPING_THRESHOLD
