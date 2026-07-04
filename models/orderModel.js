@@ -175,6 +175,12 @@ var orderSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+orderSchema.index({ createdAt: -1 });
+orderSchema.index({ orderCalled: 1, createdAt: -1 });
+orderSchema.index({ orderStatus: 1, createdAt: -1 });
+orderSchema.index({ orderType: 1, createdAt: -1 });
+
 orderSchema.pre("save", async function (next) {
   try {
     if (!this.orderNumber) {

@@ -63,10 +63,7 @@ const getOrderTypeLabel = (order) => {
   return order?.orderType || 'N/A';
 };
 const getLatestOrderNote = (order) => {
-  const comments = Array.isArray(order?.orderComment) ? order.orderComment : [];
-  if (!comments.length) return '';
-  const latestComment = comments[comments.length - 1];
-  return String(latestComment?.message || '').trim();
+  return String(order?.latestOrderComment?.message || '').trim();
 };
 
 export default function OrdersPage() {
@@ -74,6 +71,7 @@ export default function OrdersPage() {
   const searchParams = useSearchParams();
   const page = parseInt(searchParams.get('page')) || 1;
 
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
   const [startDate, setStartDate] = useState('');
@@ -105,8 +103,8 @@ export default function OrdersPage() {
 
   const handleSearch = (e) => {
     if (e.key === 'Enter') {
+      setSearchQuery(searchInput.trim());
       router.push(`/orders?page=1`);
-      fetchOrders(1, searchQuery, activeFilter, startDate, endDate);
     }
   };
 
@@ -126,7 +124,7 @@ export default function OrdersPage() {
 
   const handleConfirm = async (order) => {
     if (await updateOrderStatus(order._id, 'confirm')) {
-      fetchOrders(page, searchQuery, activeFilter);
+      fetchOrders(page, searchQuery, activeFilter, startDate, endDate);
     }
     const orderItemsString = order?.orderItems?.map((item) => {
       return `- ${item.product.title} - ${INR_SYMBOL}${item.product.price} x ${item.quantity}`;
@@ -169,7 +167,7 @@ export default function OrdersPage() {
   const handleCancel = async (order) => {
     if (!confirm('Cancel this order?')) return;
     if (await updateOrderStatus(order._id, 'cancel')) {
-      fetchOrders(page, searchQuery, activeFilter);
+      fetchOrders(page, searchQuery, activeFilter, startDate, endDate);
     }
     try {
       const res = await fetch(`/api/order/update-order-tag?id=${order._id}&token=${user?.token}&tag=Cancel`);
@@ -455,18 +453,19 @@ export default function OrdersPage() {
           <Search size={18} className={styles.searchIcon} />
           <input
             type="text"
-            placeholder="Search by order number, customer, email..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by order number, customer, email and press Enter"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             onKeyDown={handleSearch}
             className={styles.searchField}
           />
-          {searchQuery && (
+          {searchInput && (
             <button
               className={filterStyles.clearSearch}
               onClick={() => {
+                setSearchInput('');
                 setSearchQuery('');
-                fetchOrders(1, '', activeFilter, startDate, endDate);
+                router.push('/orders?page=1');
               }}
             >
               <X size={14} />

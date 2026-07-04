@@ -1,6 +1,8 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useSelector } from 'react-redux';
 import toast from 'react-hot-toast';
+
+const DEFAULT_ORDER_PAGE_SIZE = 20;
 
 export const useOrders = () => {
   const [orders, setOrders] = useState([]);
@@ -8,20 +10,27 @@ export const useOrders = () => {
   const [loading, setLoading] = useState(false);
   const [pagination, setPagination] = useState({ page: 1, hasMore: false });
   const { user } = useSelector((state) => state.auth);
+  const activeRequestRef = useRef(null);
 
   // Inside useOrders.js or similar
   const fetchOrders = useCallback(async (page, search, filter, startDate, endDate) => {
+    activeRequestRef.current?.abort();
+    const controller = new AbortController();
+    activeRequestRef.current = controller;
     setLoading(true);
     try {
       const params = new URLSearchParams({
-        page,
-        limit: 50,
+        page: String(page),
+        limit: String(DEFAULT_ORDER_PAGE_SIZE),
         ...(search && { search }),
         ...(filter && filter !== 'all' && { filter }),
         ...(startDate && { startDate }),
         ...(endDate && { endDate }),
       });
-      const res = await fetch(`/api/user/getallorders?${params}`);
+      const res = await fetch(`/api/user/getallorders?${params}`, {
+        cache: 'no-store',
+        signal: controller.signal,
+      });
       const data = await res.json();
       if (data.orders) {
         setOrders(data.orders);
@@ -34,10 +43,16 @@ export const useOrders = () => {
         setFilters(data.filters); // store filter stats
       }
     } catch (error) {
+      if (error?.name === 'AbortError') {
+        return;
+      }
       console.error(error);
       toast.error('Failed to fetch orders');
     } finally {
-      setLoading(false);
+      if (activeRequestRef.current === controller) {
+        activeRequestRef.current = null;
+        setLoading(false);
+      }
     }
   }, []);
 

@@ -29,6 +29,14 @@ const EXCLUDE_CANCELLED_RETURNED = {
   $nor: [CANCELLED_ORDER_MATCH, RETURNED_ORDER_MATCH],
 };
 
+const ORDER_LIST_PRODUCT_PROJECT = {
+  _id: 1,
+  title: 1,
+  price: 1,
+  handle: 1,
+  images: { $slice: [{ $ifNull: ['$images', []] }, 1] },
+};
+
 function buildFilterQuery(filter) {
   switch (filter) {
     case 'confirmed':
@@ -85,8 +93,10 @@ function buildFilterQuery(filter) {
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
-  const limit = parseInt(searchParams.get('limit') || 50);
-  const page = parseInt(searchParams.get('page') || 1);
+  const requestedLimit = parseInt(searchParams.get('limit') || '20', 10);
+  const requestedPage = parseInt(searchParams.get('page') || '1', 10);
+  const limit = Number.isNaN(requestedLimit) ? 20 : Math.min(Math.max(requestedLimit, 1), 50);
+  const page = Number.isNaN(requestedPage) ? 1 : Math.max(requestedPage, 1);
   const search = searchParams.get('search') || '';
   const filter = searchParams.get('filter') || 'all';
   const startDate = searchParams.get('startDate');
@@ -241,15 +251,64 @@ export async function GET(request) {
           // Paginated orders with product population
           orders: [
             { $match: filterQuery }, // apply the selected filter
-            { $addFields: { finalAmount: '$_effectiveFinalAmount' } },
             { $sort: { _orderNumberSequence: -1, createdAt: -1 } },
             { $skip: skip },
             { $limit: limit },
             {
+              $project: {
+                orderNumber: 1,
+                createdAt: 1,
+                orderType: 1,
+                orderStatus: 1,
+                orderCalled: 1,
+                finalAmount: '$_effectiveFinalAmount',
+                paymentInfo: {
+                  razorpayOrderId: '$paymentInfo.razorpayOrderId',
+                  razorpayPaymentId: '$paymentInfo.razorpayPaymentId',
+                  paymentId: '$paymentInfo.paymentId',
+                },
+                shippingInfo: {
+                  firstname: '$shippingInfo.firstname',
+                  lastname: '$shippingInfo.lastname',
+                  email: '$shippingInfo.email',
+                  phone: '$shippingInfo.phone',
+                  city: '$shippingInfo.city',
+                  state: '$shippingInfo.state',
+                },
+                latestOrderComment: {
+                  $let: {
+                    vars: {
+                      lastComment: {
+                        $arrayElemAt: [
+                          { $ifNull: ['$orderComment', []] },
+                          -1,
+                        ],
+                      },
+                    },
+                    in: {
+                      message: { $ifNull: ['$$lastComment.message', ''] },
+                      time: '$$lastComment.time',
+                      name: '$$lastComment.name',
+                    },
+                  },
+                },
+                orderItems: 1,
+              },
+            },
+            {
               $lookup: {
                 from: 'products',
-                localField: 'orderItems.product',
-                foreignField: '_id',
+                let: { productIds: '$orderItems.product' },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $in: ['$_id', { $ifNull: ['$$productIds', []] }],
+                      },
+                    },
+                  },
+                  { $project: ORDER_LIST_PRODUCT_PROJECT },
+                ],
                 as: 'populatedProducts',
               },
             },
