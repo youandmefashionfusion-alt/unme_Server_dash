@@ -2,6 +2,7 @@ import connectDb from "../../../../../config/connectDb";
 import OrderModel from "../../../../../models/orderModel";
 import sendEmail from "../../../../../controller/emailController";
 export async function PUT(req){
+    const { searchParams } = new URL(req.url);
     const body = await req.json();
     const {
       name,
@@ -9,7 +10,7 @@ export async function PUT(req){
       partner,
       link,
       email,
-      orderId,
+      orderId: bodyOrderId,
       trackingId,
       trackingLink,
       pickupDatetime,
@@ -18,6 +19,7 @@ export async function PUT(req){
       sendEmailUpdate = true,
       updateOrderStatus = true,
     } = body;
+    const orderId = bodyOrderId || searchParams.get("id");
 
     try {
       await connectDb();

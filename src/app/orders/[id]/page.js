@@ -157,14 +157,21 @@ export default function OrderDetailPage() {
       if (res.ok && hasValidOrder) {
         setOrder(orderPayload);
         if (orderPayload.trackingInfo) {
+          const trackingId =
+            orderPayload.trackingInfo.trackingId ||
+            orderPayload.trackingInfo.link
+              ?.split("TrackingId: ")[1]
+              ?.split(",")[0] ||
+            "";
+          const trackingLink =
+            orderPayload.trackingInfo.trackingLink ||
+            orderPayload.trackingInfo.link?.split("Tracking Link: ")[1] ||
+            "";
+
           setTracking({
             partner: orderPayload.trackingInfo.partner || "",
-            id:
-              orderPayload.trackingInfo.link
-                ?.split("TrackingId: ")[1]
-                ?.split(",")[0] || "",
-            link:
-              orderPayload.trackingInfo.link?.split("Tracking Link: ")[1] || "",
+            id: trackingId,
+            link: trackingLink,
           });
         } else {
           setTracking({ partner: "", id: "", link: "" });
@@ -957,16 +964,19 @@ export default function OrderDetailPage() {
             {/* ─────────────────────────────────────────────────────────────── */}
 
             {/* Manual tracking card (non-Delhivery) — only show if partner is not Delhivery */}
-            {trackingInfo?.link && trackingInfo?.partner !== "Delhivery" && (
+            {(trackingInfo?.trackingId || trackingInfo?.link) &&
+              trackingInfo?.partner !== "Delhivery" && (
               <div className={styles.card}>
                 <h2 className={styles.cardTitle}>Tracking</h2>
                 <div className={styles.trackingInfo}>
                   <p className={styles.trackingPartner}>
                     {trackingInfo.partner}
                   </p>
-                  <p className={styles.trackingId}>ID: {tracking.id}</p>
+                  <p className={styles.trackingId}>
+                    Tracking Number: {trackingInfo.trackingId || tracking.id}
+                  </p>
                   <a
-                    href={tracking.link}
+                    href={trackingInfo.trackingLink || tracking.link}
                     target="_blank"
                     rel="noopener noreferrer"
                     className={styles.trackingLink}
@@ -1099,7 +1109,7 @@ export default function OrderDetailPage() {
                 </select>
               </div>
               <div className={styles.formGroup}>
-                <label>Tracking ID</label>
+                <label>Tracking Number</label>
                 <input
                   type="text"
                   value={tracking.id}
@@ -1132,6 +1142,8 @@ export default function OrderDetailPage() {
                 onClick={() =>
                   handleStatusUpdate("tracking", {
                     partner: tracking.partner,
+                    trackingId: tracking.id,
+                    trackingLink: tracking.link,
                     link: `TrackingId: ${tracking.id}, Tracking Link: ${tracking.link}`,
                   })
                 }
