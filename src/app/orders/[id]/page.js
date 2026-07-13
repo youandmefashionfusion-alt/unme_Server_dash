@@ -641,11 +641,11 @@ export default function OrderDetailPage() {
             className={styles.secondaryBtn}
           >
             <Printer size={16} />
-            Packing Slip 1
+            Invoice (Packing Slip)
           </button>
           <button onClick={handleDownloadSlip2} className={styles.secondaryBtn}>
             <Printer size={16} />
-            Packing Slip 2
+            Shree maruti slip
           </button>
           <Link
             href={`/orders/${orderId}/edit`}
