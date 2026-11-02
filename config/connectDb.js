@@ -23,6 +23,8 @@ const connectDb = async () => {
 
   connectPromise = mongoose
     .connect(mongoUrl, {
+      // Atlas free tier (M0) caps the cluster at 500 connections shared with the website.
+      maxPoolSize: Number(process.env.MONGO_MAX_POOL_SIZE) || 10,
       serverSelectionTimeoutMS: 10000,
       connectTimeoutMS: 10000,
     })
